@@ -50,7 +50,7 @@ function TabsList({ className = "", children }) {
 function TabsTrigger({ value, className = "", children }) {
   const ctx = useContext(TabsContext);
   const active = ctx?.value === value;
-  return <button type="button" onClick={() => ctx?.setValue(value)} className={cx("min-w-[88px] rounded-lg px-4 py-2 text-sm font-medium transition", active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900", className)}>{children}</button>;
+  return <button type="button" onClick={() => ctx?.setValue(value)} className={cx("rounded-lg px-3 py-1.5 text-sm font-medium transition", active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900", className)}>{children}</button>;
 }
 
 function TabsContent({ value, className = "", children }) {
@@ -901,7 +901,7 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
     <Card className="rounded-xl shadow-sm">
       <CardContent className="p-3 space-y-3">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="bar" /> 全部股票 / ETF 總覽</h3><p className="text-xs text-slate-500 mt-0.5">依短線 V1 排序；鎖定約 5 檔高度。點擊短線、中線或長線查看評語。</p></div><Badge className="bg-slate-100 text-slate-700">資料模式：{dataMode}</Badge></div>
-        <div className="max-h-[260px] overflow-y-scroll overflow-x-auto rounded-lg border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1240px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-14 px-2 py-2 text-center">排名</th><th>標的</th><th>類型</th><th>市場</th><th>現價</th><th>今日</th><th>短線</th><th>中線</th><th>長線</th><th>技術</th><th>籌碼</th><th>市場</th><th>建議</th><th>資料驗證</th><th className="w-20 text-center">操作</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.stock.symbol} className={`border-b last:border-0 cursor-pointer hover:bg-slate-50 ${selected === row.stock.symbol ? "bg-slate-100" : ""}`} onClick={() => onSelect(row.stock.symbol)}><td className="px-2 py-2 text-center font-medium tabular-nums">{index + 1}</td><td className="font-medium">{row.stock.symbol} {row.stock.name}</td><td>{row.stock.type}</td><td>{row.stock.market}</td><td>{number(row.stock.price)}</td><td>{pct(row.derived.todayReturn)}</td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "short"); }}><ScoreBadge score={row.short.score100} /></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "mid"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "long"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td>{Math.round(row.tech)}</td><td>{Math.round(row.chip)}</td><td>{Math.round(row.market)}</td><td><Badge className={row.recommendation.tone}>{row.recommendation.label}</Badge></td><td><Badge className={row.validationState.tone}>{row.validationState.label}</Badge></td><td className="text-center"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(row.stock.symbol); }}>移除</Button></td></tr>)}</tbody></table></div>
+        <div className="max-h-[260px] overflow-y-scroll overflow-x-auto rounded-lg border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1120px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-14 px-2 py-2 text-center">排名</th><th>標的</th><th>類型</th><th>市場</th><th>現價</th><th>今日</th><th>短線</th><th>中線</th><th>長線</th><th>技術</th><th>籌碼</th><th>市場</th><th>建議</th><th>資料驗證</th><th className="w-20 text-center">操作</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.stock.symbol} className={`border-b last:border-0 cursor-pointer hover:bg-slate-50 ${selected === row.stock.symbol ? "bg-slate-100" : ""}`} onClick={() => onSelect(row.stock.symbol)}><td className="px-2 py-2 text-center font-medium tabular-nums">{index + 1}</td><td className="font-medium">{row.stock.symbol} {row.stock.name}</td><td>{row.stock.type}</td><td>{row.stock.market}</td><td>{number(row.stock.price)}</td><td>{pct(row.derived.todayReturn)}</td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "short"); }}><ScoreBadge score={row.short.score100} /></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "mid"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "long"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td>{Math.round(row.tech)}</td><td>{Math.round(row.chip)}</td><td>{Math.round(row.market)}</td><td><Badge className={row.recommendation.tone}>{row.recommendation.label}</Badge></td><td><Badge className={row.validationState.tone}>{row.validationState.label}</Badge></td><td className="text-center"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(row.stock.symbol); }}>移除</Button></td></tr>)}</tbody></table></div>
         <div className="flex items-center justify-between text-[11px] text-slate-400">
           <span>顯示區已鎖定約 5 檔高度；若標的超過可視範圍，請在表格內上下滾動。</span>
           <span>{rows.length} 檔標的</span>
@@ -1039,7 +1039,7 @@ export default function StockShortV1App() {
   const [lastFetchMap, setLastFetchMap] = useState({});
   const [validationMap, setValidationMap] = useState({});
   const [googleDebug, setGoogleDebug] = useState(null);
-  const [weightConfig, setWeightConfig] = useState(cloneWeightConfig());
+    const [weightConfig, setWeightConfig] = useState(cloneWeightConfig());
   const current = stocks.find((s) => s.symbol === selected) || stocks[0];
   const derived = getDerived(current);
   const overviewRows = useMemo(() => buildOverviewRows(stocks, validationMap, weightConfig), [stocks, validationMap, weightConfig]);
@@ -1189,266 +1189,19 @@ export default function StockShortV1App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-100 text-slate-900">
-      <div className="mx-auto max-w-[1500px] space-y-5 px-4 py-5 lg:px-6">
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="grid gap-0 lg:grid-cols-[1.5fr_1fr]">
-            <div className="space-y-5 p-5 lg:p-7">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className="bg-slate-900 text-white">Stock Score V1</Badge>
-                <Badge className="bg-blue-100 text-blue-800">資料模式：{dataMode}</Badge>
-                <Badge className={recommendation.tone}>{recommendation.label}</Badge>
-              </div>
-              <div>
-                <h1 className="text-3xl font-black tracking-tight text-slate-950 lg:text-4xl">
-                  股票短中長分析 App
-                </h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 lg:text-base">
-                  先用總覽快速篩選股票 / ETF，再點進單檔查看短線評分、資料驗證與資料源狀態。短線 V1 維持原三大面向，並加入停損閘門；中線與長線目前仍是架構版。
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">目前標的</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{current.symbol}</div>
-                  <div className="mt-1 text-sm text-slate-500">{current.name}｜{current.type}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">短線分數</div>
-                  <div className="mt-2 flex items-end gap-2">
-                    <span className="text-3xl font-black text-slate-950">{Math.round(shortV1.score100)}</span>
-                    <span className="pb-1 text-sm text-slate-500">/ 100</span>
-                  </div>
-                  <div className="mt-2"><ScoreBar label="短線強度" score={shortV1.score100} /></div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">現價 / 今日</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{number(current.price)}</div>
-                  <div className="mt-1 text-sm text-slate-500">今日變化 {pct(derived.todayReturn)}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-semibold text-slate-500">資料驗證</div>
-                  <div className="mt-2"><Badge className={overviewRows.find((row) => row.stock.symbol === current.symbol)?.validationState?.tone || "bg-slate-100 text-slate-700"}>{overviewRows.find((row) => row.stock.symbol === current.symbol)?.validationState?.label || "未驗證"}</Badge></div>
-                  <div className="mt-2 text-sm text-slate-500">總覽共 {stocks.length} 檔</div>
-                </div>
-              </div>
-            </div>
-            <div className="border-t border-slate-200 bg-slate-50/80 p-5 lg:border-l lg:border-t-0 lg:p-7">
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                {shortV1.dimensions.filter((dim) => dim.weight > 0).map((dim) => (
-                  <div key={dim.dimension} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-bold text-slate-950">{dim.dimension}</div>
-                        <div className="mt-1 text-xs text-slate-500">權重 {dim.weight.toFixed(2)}</div>
-                      </div>
-                      <ScoreBadge score={dim.scorePct} />
-                    </div>
-                    <div className="mt-3"><ScoreBar label="面向分數" score={dim.scorePct} /></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="space-y-5">
-            <OverviewTable
-              rows={overviewRows}
-              selected={selected}
-              onSelect={setSelected}
-              onInsight={(symbol, horizon) => {
-                setSelected(symbol);
-                setInsightTarget({ symbol, horizon });
-              }}
-              onRemove={removeAsset}
-              dataMode={dataMode}
-            />
-
-            <Tabs defaultValue="short" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-3 rounded-2xl bg-slate-100 p-1 sm:grid-cols-6">
-                <TabsTrigger value="short">短線V1</TabsTrigger>
-                <TabsTrigger value="mid">中線V1</TabsTrigger>
-                <TabsTrigger value="long">長線V1</TabsTrigger>
-                <TabsTrigger value="sources">資料源</TabsTrigger>
-                <TabsTrigger value="validate">資料驗證</TabsTrigger>
-                <TabsTrigger value="tests">測試</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="short" className="space-y-4">
-                <FrameworkTable
-                  title="圖片版短線評分表"
-                  subtitle="可直接在表格的權重欄位手動調整；新增基本面與衍生性金融商品預設權重為 0。"
-                  result={shortV1}
-                  showScore
-                  horizon="short"
-                  onWeightChange={updateWeight}
-                  onResetHorizon={resetHorizonWeights}
-                />
-                <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-5">
-                  {shortV1.dimensions.map((dim) => <DimensionScoreCard key={dim.dimension} dim={dim} />)}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="mid">
-                <FrameworkTable
-                  title="中線 V1 架構表"
-                  subtitle={getFrameworkAnalysis("中線", midV1)}
-                  result={midV1}
-                  showScore
-                  horizon="mid"
-                  onWeightChange={updateWeight}
-                  onResetHorizon={resetHorizonWeights}
-                />
-              </TabsContent>
-
-              <TabsContent value="long">
-                <FrameworkTable
-                  title="長線 V1 架構表"
-                  subtitle={getFrameworkAnalysis("長線", longV1)}
-                  result={longV1}
-                  showScore
-                  horizon="long"
-                  onWeightChange={updateWeight}
-                  onResetHorizon={resetHorizonWeights}
-                />
-              </TabsContent>
-
-              <TabsContent value="sources">
-                <div className="space-y-4">
-                  <SourceConnectorTable
-                    config={apiConfig}
-                    onConfigChange={setApiConfig}
-                    onLoadGoogle={loadGoogleCsv}
-                    onLoadFinMind={loadFinMindProxy}
-                    onLoadTwse={loadTwseOpenApi}
-                    loading={apiLoading}
-                    apiMessage={apiMessage}
-                    lastFetchMap={lastFetchMap}
-                    stocks={stocks}
-                    googleDebug={googleDebug}
-                  />
-                  <Card className="rounded-2xl shadow-sm">
-                    <CardContent className="space-y-3 p-4">
-                      <h3 className="flex items-center gap-2 font-semibold"><Icon name="doc" /> FinMind 五大面向總覽</h3>
-                      <div className="rounded-2xl border bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-                        <div className="font-semibold text-slate-900">資料原則</div>
-                        <div>主資料統一先吃 FinMind；能用 TWSE / TPEx / MOPS / TAIFEX / GoogleFinance 驗證的欄位就驗證；驗證來源無法取得的欄位先保留主資料，不判定為驗證失敗。</div>
-                      </div>
-                      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-                        <table className="w-full min-w-[1300px] text-sm">
-                          <thead className="bg-slate-50">
-                            <tr className="border-b text-left text-slate-500">
-                              <th className="py-3 pl-3">面向</th><th>FinMind Dataset</th><th>主要欄位</th><th>怎麼算 / 使用方式</th><th>驗證 / 備援來源</th><th>短線角色</th><th>中線角色</th><th>長線角色</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {finmindAspectPlan.map((item) => (
-                              <tr key={item.aspect} className="border-b last:border-0 align-top">
-                                <td className="py-3 pl-3 font-medium">{item.aspect}</td>
-                                <td className="max-w-xs text-slate-600">{item.datasets}</td>
-                                <td className="max-w-xs text-slate-600">{item.fields}</td>
-                                <td className="max-w-sm text-slate-500">{item.calcNote}</td>
-                                <td className="max-w-xs text-slate-500">{item.verifyRef}</td>
-                                <td className="max-w-sm text-slate-500">{item.shortRole}</td>
-                                <td className="max-w-sm text-slate-500">{item.midRole}</td>
-                                <td className="max-w-sm text-slate-500">{item.longRole}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="validate">
-                <Card className="rounded-2xl shadow-sm">
-                  <CardContent className="space-y-4 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <h3 className="flex items-center gap-2 font-semibold"><Icon name="doc" /> 主資料 vs 驗證來源</h3>
-                        <p className="mt-2 text-sm text-slate-500">FinMind / TWSE 作主資料源，GoogleFinance 只作行情/估值輔助驗證，不覆蓋總覽主資料。</p>
-                      </div>
-                      <Badge className="bg-slate-100 text-slate-700">策略：能驗證就驗證，不能驗證先用主資料</Badge>
-                    </div>
-                    <div className="rounded-2xl border bg-white p-4 text-sm leading-6 text-slate-700">
-                      <span className="font-medium text-slate-900">驗證結論：</span>{validationSummary(getSourceValidationRows(selected, current, validationMap))}
-                    </div>
-                    <div className="max-h-[420px] overflow-y-scroll overflow-x-auto rounded-2xl border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]">
-                      <table className="w-full min-w-[980px] text-sm">
-                        <thead className="sticky top-0 z-10 bg-slate-50">
-                          <tr className="border-b text-left text-slate-500"><th className="py-3 pl-3">欄位</th><th>主資料</th><th>驗證來源</th><th>偏差</th><th>容忍值</th><th>狀態</th><th>備註</th></tr>
-                        </thead>
-                        <tbody>
-                          {getSourceValidationRows(selected, current, validationMap).map((row) => (
-                            <tr key={row.label} className="border-b last:border-0">
-                              <td className="py-3 pl-3 font-medium">{row.label}</td>
-                              <td>{displayValue(row.finmindValue)}</td>
-                              <td>{displayValue(row.googleValue)}</td>
-                              <td>{pct(row.diffPct)}</td>
-                              <td>±{row.tolerancePct}%</td>
-                              <td><Badge className={row.status === "通過" ? "bg-emerald-100 text-emerald-800" : row.status === "需檢查" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}>{row.status}</Badge></td>
-                              <td className="max-w-md text-slate-500">{row.note}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="tests">
-                <Card className="rounded-2xl shadow-sm">
-                  <CardContent className="space-y-3 p-4">
-                    <h3 className="font-semibold">內建 Smoke Tests</h3>
-                    <div className="grid gap-2 xl:grid-cols-2">
-                      {selfTests.map((t) => (
-                        <div key={t.name} className="flex items-start justify-between gap-3 rounded-2xl border bg-white p-3">
-                          <div>
-                            <div className="font-medium">{t.name}</div>
-                            <div className="text-sm text-slate-500">{t.detail}</div>
-                          </div>
-                          <Badge className={t.pass ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}>{t.pass ? "PASS" : "FAIL"}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          <aside className="space-y-5 xl:sticky xl:top-5 xl:self-start">
-            <AddAssetForm value={newAsset} onChange={setNewAsset} onAdd={addAsset} error={addError} />
-            <InsightPanel insight={activeInsight} />
-            <Card className="rounded-2xl shadow-sm">
-              <CardContent className="space-y-3 p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">目前選取</h3>
-                  <Badge className={recommendation.tone}>{recommendation.label}</Badge>
-                </div>
-                <div className="rounded-2xl border bg-slate-50 p-4">
-                  <div className="text-xl font-black text-slate-950">{current.symbol} {current.name}</div>
-                  <div className="mt-1 text-sm text-slate-500">{current.market}｜{current.type}</div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div><div className="text-slate-500">RSI14</div><div className="font-bold text-slate-950">{current.rsi14}</div></div>
-                    <div><div className="text-slate-500">量比</div><div className="font-bold text-slate-950">{derived.volumeRatio.toFixed(2)}x</div></div>
-                    <div><div className="text-slate-500">20日位置</div><div className="font-bold text-slate-950">{pct(derived.closePosition20)}</div></div>
-                    <div><div className="text-slate-500">法人3日</div><div className="font-bold text-slate-950">{number(derived.institutional3d)}</div></div>
-                  </div>
-                </div>
-                <div className="text-xs leading-5 text-slate-500">
-                  這個側欄只做排版收斂：讓新增標的、評語與目前選取集中在右側；核心計分與資料源邏輯未更動。
-                </div>
-              </CardContent>
-            </Card>
-          </aside>
-        </section>
-      </div>
-    </div>
+    <div className="min-h-screen bg-slate-50 p-3 text-slate-900"><div className="mx-auto max-w-7xl space-y-3">
+      <div><h1 className="text-2xl font-bold tracking-tight">股票短中長分析 App — V1</h1><p className="text-sm text-slate-500 mt-1">先做全部股票 / ETF 總覽，再點進單檔細節。短線 V1 維持原三大面向，並加入停損閘門；中線與長線公式尚未啟用。</p></div>
+      <AddAssetForm value={newAsset} onChange={setNewAsset} onAdd={addAsset} error={addError} />
+      <OverviewTable rows={overviewRows} selected={selected} onSelect={setSelected} onInsight={(symbol, horizon) => { setSelected(symbol); setInsightTarget({ symbol, horizon }); }} onRemove={removeAsset} dataMode={dataMode} />
+      <InsightPanel insight={activeInsight} />
+      <Tabs defaultValue="short" className="space-y-3"><TabsList className="flex w-full flex-wrap gap-1 rounded-xl"><TabsTrigger value="short" className="min-w-[88px]">短線V1</TabsTrigger><TabsTrigger value="mid" className="min-w-[88px]">中線V1</TabsTrigger><TabsTrigger value="long" className="min-w-[88px]">長線V1</TabsTrigger><TabsTrigger value="sources" className="min-w-[88px]">資料源</TabsTrigger><TabsTrigger value="validate" className="min-w-[88px]">資料驗證</TabsTrigger><TabsTrigger value="tests" className="min-w-[88px]">測試</TabsTrigger></TabsList>
+        <TabsContent value="short"><FrameworkTable title="圖片版短線評分表" subtitle="可直接在表格的權重欄位手動調整；新增基本面與衍生性金融商品預設權重為 0。" result={shortV1} showScore horizon="short" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /><div className="grid gap-3 md:grid-cols-5 mt-3">{shortV1.dimensions.map((dim) => <DimensionScoreCard key={dim.dimension} dim={dim} />)}</div></TabsContent>
+        <TabsContent value="mid"><FrameworkTable title="中線 V1 架構表" subtitle={getFrameworkAnalysis("中線", midV1)} result={midV1} showScore horizon="mid" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /></TabsContent>
+        <TabsContent value="long"><FrameworkTable title="長線 V1 架構表" subtitle={getFrameworkAnalysis("長線", longV1)} result={longV1} showScore horizon="long" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /></TabsContent>
+        <TabsContent value="sources"><div className="space-y-4"><SourceConnectorTable config={apiConfig} onConfigChange={setApiConfig} onLoadGoogle={loadGoogleCsv} onLoadFinMind={loadFinMindProxy} onLoadTwse={loadTwseOpenApi} loading={apiLoading} apiMessage={apiMessage} lastFetchMap={lastFetchMap} stocks={stocks} googleDebug={googleDebug} /><Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> FinMind 五大面向總覽</h3><div className="rounded-lg border bg-slate-50 p-3 text-xs leading-6 text-slate-600"><div className="font-semibold text-slate-900">資料原則</div><div>主資料統一先吃 FinMind；能用 TWSE / TPEx / MOPS / TAIFEX / GoogleFinance 驗證的欄位就驗證；驗證來源無法取得的欄位先保留主資料，不判定為驗證失敗。</div></div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1300px] text-sm"><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="py-2">面向</th><th>FinMind Dataset</th><th>主要欄位</th><th>怎麼算 / 使用方式</th><th>驗證 / 備援來源</th><th>短線角色</th><th>中線角色</th><th>長線角色</th></tr></thead><tbody>{finmindAspectPlan.map((item) => <tr key={item.aspect} className="border-b last:border-0 align-top"><td className="py-2 font-medium">{item.aspect}</td><td className="max-w-xs text-slate-600">{item.datasets}</td><td className="max-w-xs text-slate-600">{item.fields}</td><td className="max-w-sm text-slate-500">{item.calcNote}</td><td className="max-w-xs text-slate-500">{item.verifyRef}</td><td className="max-w-sm text-slate-500">{item.shortRole}</td><td className="max-w-sm text-slate-500">{item.midRole}</td><td className="max-w-sm text-slate-500">{item.longRole}</td></tr>)}</tbody></table></div></CardContent></Card></div></TabsContent>
+        <TabsContent value="validate"><Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 主資料 vs 驗證來源</h3><p className="text-sm text-slate-500 mt-2">FinMind / TWSE 作主資料源，GoogleFinance 只作行情/估值輔助驗證，不覆蓋總覽主資料。</p></div><Badge className="bg-slate-100 text-slate-700">策略：能驗證就驗證，不能驗證先用主資料</Badge></div><div className="rounded-xl bg-white border p-4 text-sm text-slate-700"><span className="font-medium text-slate-900">驗證結論：</span>{validationSummary(getSourceValidationRows(selected, current, validationMap))}</div><div className="max-h-[340px] overflow-y-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="py-2">欄位</th><th>主資料</th><th>驗證來源</th><th>偏差</th><th>容忍值</th><th>狀態</th><th>備註</th></tr></thead><tbody>{getSourceValidationRows(selected, current, validationMap).map((row) => <tr key={row.label} className="border-b last:border-0"><td className="py-2 font-medium">{row.label}</td><td>{displayValue(row.finmindValue)}</td><td>{displayValue(row.googleValue)}</td><td>{pct(row.diffPct)}</td><td>±{row.tolerancePct}%</td><td><Badge className={row.status === "通過" ? "bg-emerald-100 text-emerald-800" : row.status === "需檢查" ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-700"}>{row.status}</Badge></td><td className="max-w-md text-slate-500">{row.note}</td></tr>)}</tbody></table></div></CardContent></Card></TabsContent>
+        <TabsContent value="tests"><Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-2"><h3 className="font-semibold">內建 Smoke Tests</h3><div className="space-y-1.5">{selfTests.map((t) => <div key={t.name} className="flex items-start justify-between gap-3 rounded-xl border bg-white p-3"><div><div className="font-medium">{t.name}</div><div className="text-sm text-slate-500">{t.detail}</div></div><Badge className={t.pass ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}>{t.pass ? "PASS" : "FAIL"}</Badge></div>)}</div></CardContent></Card></TabsContent>
+      </Tabs>
+    </div></div>
   );
 }
