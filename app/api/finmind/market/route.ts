@@ -86,7 +86,17 @@ function normalizeUsPrice(id: string, rows: any[]) {
   const previous = sorted[sorted.length - 2];
 
   if (!latest) {
-    return { id, dataset: "USStockPrice", hasData: false };
+    return {
+      id,
+      dataset: "USStockPrice",
+      hasData: false,
+      rowCount: rows.length,
+      debug: {
+        latestRaw: null,
+        previousRaw: null,
+        note: "FinMind returned no rows for this data_id in the requested date range.",
+      },
+    };
   }
 
   const close = toNumber(latest.Close ?? latest.close ?? latest.Adj_Close);
@@ -101,6 +111,20 @@ function normalizeUsPrice(id: string, rows: any[]) {
     return1d: returnPct(close, prevClose),
     volume: toNumber(latest.Volume ?? latest.volume),
     updatedAt: latest.date || "",
+    rowCount: rows.length,
+    debug: {
+      latestRaw: latest,
+      previousRaw: previous || null,
+      closeFieldUsed: latest.Close !== undefined ? "Close" : latest.close !== undefined ? "close" : "Adj_Close",
+      prevCloseFieldUsed: previous
+        ? previous.Close !== undefined
+          ? "Close"
+          : previous.close !== undefined
+            ? "close"
+            : "Adj_Close"
+        : "same_as_latest",
+      note: id === "^VIX" ? "VIX is kept as reference only in page.tsx. Use this raw sample to check whether FinMind has stale date or different quote basis." : "",
+    },
   };
 }
 
@@ -222,13 +246,14 @@ export async function GET(request: Request) {
   };
 
   const byId = Object.fromEntries(usMarket.map((item) => [item.id, item]));
+  const includeDebug = searchParams.get("debug") === "1";
 
   return NextResponse.json({
     ok: true,
     source: "finmind_market_proxy",
     tokenSource,
     market: {
-      us: usMarket,
+      us: usMarket.map((item: any) => includeDebug ? item : ({ ...item, debug: undefined })),
       fx,
       bonds,
       oil,
@@ -242,6 +267,7 @@ export async function GET(request: Request) {
         vixChange1d: byId["^VIX"]?.return1d ?? null,
       },
     },
+    vixDebug: includeDebug ? byId["^VIX"]?.debug || null : undefined,
     fetchedAt: new Date().toISOString(),
     requestCostHint: {
       defaultRequests: usIds.length + fxIds.length + bondIds.length + oilIds.length + 2,
