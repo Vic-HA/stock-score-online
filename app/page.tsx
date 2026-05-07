@@ -44,13 +44,13 @@ function Tabs({ defaultValue, className = "", children }) {
 }
 
 function TabsList({ className = "", children }) {
-  return <div className={cx("inline-flex items-center bg-slate-100 p-1", className)}>{children}</div>;
+  return <div className={cx("inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1", className)}>{children}</div>;
 }
 
 function TabsTrigger({ value, className = "", children }) {
   const ctx = useContext(TabsContext);
   const active = ctx?.value === value;
-  return <button type="button" onClick={() => ctx?.setValue(value)} className={cx("rounded-lg px-3 py-1.5 text-sm font-medium transition", active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900", className)}>{children}</button>;
+  return <button type="button" onClick={() => ctx?.setValue(value)} className={cx("w-full min-w-0 whitespace-nowrap rounded-lg px-2 py-2 text-base font-medium transition", active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900", className)}>{children}</button>;
 }
 
 function TabsContent({ value, className = "", children }) {
@@ -807,14 +807,14 @@ function getScoreTone(score) {
 
 function ScoreBadge({ score }) {
   const tone = getScoreTone(score);
-  return <Badge className={tone.badge}>{Math.round(score)}</Badge>;
+  return <Badge className={cx("text-sm px-3 py-1", tone.badge)}>{Math.round(score)}</Badge>;
 }
 
 function ScoreBar({ label, score }) {
   const tone = getScoreTone(score);
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between text-[15px]">
         <span className="text-slate-600">{label}</span>
         <span className={`inline-flex min-w-[44px] items-center justify-center rounded-full px-2.5 py-1 text-sm font-bold ${tone.badge}`}>{Math.round(score)}</span>
       </div>
@@ -832,11 +832,11 @@ function DimensionScoreCard({ dim }) {
     <Card className={`rounded-xl border shadow-sm ring-2 ${tone.card} ${tone.ring}`}>
       <CardContent className="p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className={`font-bold ${tone.text}`}>{dim.dimension}</div>
+          <div className={`text-lg font-bold ${tone.text}`}>{dim.dimension}</div>
           {hasScore ? <Badge className={tone.badge}>{Math.round(dim.scorePct)}</Badge> : <Badge className="bg-blue-100 text-blue-800">資料</Badge>}
         </div>
-        {hasScore ? <ScoreBar label="面向分數" score={dim.scorePct} /> : <div className="rounded-xl bg-white/70 p-3 text-sm text-slate-600">資料確認：<span className="font-bold text-slate-900">{dim.pass}/{dim.dataCount}</span> 項可用</div>}
-        <div className="text-sm text-slate-600">權重 {dim.weight.toFixed(2)}，加權得分 {dim.points.toFixed(2)}</div>
+        {hasScore ? <ScoreBar label="面向分數" score={dim.scorePct} /> : <div className="rounded-xl bg-white/70 p-3 text-[15px] text-slate-600">資料確認：<span className="font-bold text-slate-900">{dim.pass}/{dim.dataCount}</span> 項可用</div>}
+        <div className="text-[15px] text-slate-600">權重 {dim.weight.toFixed(2)}，加權得分 {dim.points.toFixed(2)}</div>
       </CardContent>
     </Card>
   );
@@ -848,7 +848,7 @@ function AddAssetForm({ value, onChange, onAdd, error }) {
       <CardContent className="p-3 space-y-2">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <h3 className="font-semibold">新增股票 / ETF</h3>
+            <h3 className="text-lg font-semibold">新增股票 / ETF</h3>
             <p className="text-xs text-slate-500 mt-0.5">先建立標的列，之後由資料源補真實資料。</p>
           </div>
           <Badge className="bg-slate-100 text-slate-700">支援股票與 ETF</Badge>
@@ -856,11 +856,11 @@ function AddAssetForm({ value, onChange, onAdd, error }) {
         <div className="grid gap-2 md:grid-cols-5">
           <Input placeholder="代號，例如 006208" value={value.symbol} onChange={(e) => onChange({ ...value, symbol: e.target.value })} />
           <Input placeholder="名稱，例如 富邦台50" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
-          <select className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value })}>
+          <select className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-[15px]" value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value })}>
             <option value="股票">股票</option>
             <option value="ETF">ETF</option>
           </select>
-          <select className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" value={value.market} onChange={(e) => onChange({ ...value, market: e.target.value })}>
+          <select className="h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-[15px]" value={value.market} onChange={(e) => onChange({ ...value, market: e.target.value })}>
             <option value="TWSE">TWSE</option>
             <option value="TPEx">TPEx</option>
           </select>
@@ -878,18 +878,18 @@ function InsightPanel({ insight }) {
       <CardContent className="p-3 space-y-2">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold">評語區塊</h3>
+            <h3 className="text-lg font-semibold">評語區塊</h3>
             <p className="text-xs text-slate-500 mt-0.5">點擊總覽表的短線、中線、長線欄位後顯示。</p>
           </div>
           {insight && <Badge className={insight.tone}>{insight.badge}</Badge>}
         </div>
         {insight ? (
-          <div className="rounded-lg border bg-white p-3 text-sm leading-6 text-slate-600">
+          <div className="rounded-lg border bg-white p-3 text-[15px] leading-7 text-slate-600">
             <div className="mb-2 font-semibold text-slate-900">{insight.title}</div>
             <p>{insight.body}</p>
           </div>
         ) : (
-          <div className="rounded-xl border bg-white p-4 text-sm text-slate-500">尚未選擇評語。請在總覽表點擊短線、中線或長線。</div>
+          <div className="rounded-xl border bg-white p-4 text-[15px] text-slate-500">尚未選擇評語。請在總覽表點擊短線、中線或長線。</div>
         )}
       </CardContent>
     </Card>
@@ -900,8 +900,8 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
   return (
     <Card className="rounded-xl shadow-sm">
       <CardContent className="p-3 space-y-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="bar" /> 全部股票 / ETF 總覽</h3><p className="text-xs text-slate-500 mt-0.5">依短線 V1 排序；鎖定約 5 檔高度。點擊短線、中線或長線查看評語。</p></div><Badge className="bg-slate-100 text-slate-700">資料模式：{dataMode}</Badge></div>
-        <div className="max-h-[260px] overflow-y-scroll overflow-x-auto rounded-lg border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1120px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-14 px-2 py-2 text-center">排名</th><th>標的</th><th>類型</th><th>市場</th><th>現價</th><th>今日</th><th>短線</th><th>中線</th><th>長線</th><th>技術</th><th>籌碼</th><th>市場</th><th>建議</th><th>資料驗證</th><th className="w-20 text-center">操作</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.stock.symbol} className={`border-b last:border-0 cursor-pointer hover:bg-slate-50 ${selected === row.stock.symbol ? "bg-slate-100" : ""}`} onClick={() => onSelect(row.stock.symbol)}><td className="px-2 py-2 text-center font-medium tabular-nums">{index + 1}</td><td className="font-medium">{row.stock.symbol} {row.stock.name}</td><td>{row.stock.type}</td><td>{row.stock.market}</td><td>{number(row.stock.price)}</td><td>{pct(row.derived.todayReturn)}</td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "short"); }}><ScoreBadge score={row.short.score100} /></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "mid"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "long"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td>{Math.round(row.tech)}</td><td>{Math.round(row.chip)}</td><td>{Math.round(row.market)}</td><td><Badge className={row.recommendation.tone}>{row.recommendation.label}</Badge></td><td><Badge className={row.validationState.tone}>{row.validationState.label}</Badge></td><td className="text-center"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(row.stock.symbol); }}>移除</Button></td></tr>)}</tbody></table></div>
+        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div><h3 className="text-lg font-semibold flex items-center gap-2"><Icon name="bar" /> 全部股票 / ETF 總覽</h3><p className="text-xs text-slate-500 mt-0.5">依短線 V1 排序；鎖定約 5 檔高度。點擊短線、中線或長線查看評語。</p></div><Badge className="bg-slate-100 text-slate-700">資料模式：{dataMode}</Badge></div>
+        <div className="max-h-[260px] overflow-y-scroll overflow-x-auto rounded-lg border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1140px] text-[15px]"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-14 px-2 py-2 text-center">排名</th><th>標的</th><th>類型</th><th>市場</th><th>現價</th><th>今日</th><th>短線</th><th>中線</th><th>長線</th><th>技術</th><th>籌碼</th><th>市場</th><th>建議</th><th>資料驗證</th><th className="w-20 text-center">操作</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.stock.symbol} className={`border-b last:border-0 cursor-pointer hover:bg-slate-50 ${selected === row.stock.symbol ? "bg-slate-100" : ""}`} onClick={() => onSelect(row.stock.symbol)}><td className="px-2 py-2 text-center font-medium tabular-nums">{index + 1}</td><td className="font-medium">{row.stock.symbol} {row.stock.name}</td><td>{row.stock.type}</td><td>{row.stock.market}</td><td>{number(row.stock.price)}</td><td>{pct(row.derived.todayReturn)}</td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "short"); }}><ScoreBadge score={row.short.score100} /></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "mid"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "long"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td>{Math.round(row.tech)}</td><td>{Math.round(row.chip)}</td><td>{Math.round(row.market)}</td><td><Badge className={row.recommendation.tone}>{row.recommendation.label}</Badge></td><td><Badge className={row.validationState.tone}>{row.validationState.label}</Badge></td><td className="text-center"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(row.stock.symbol); }}>移除</Button></td></tr>)}</tbody></table></div>
         <div className="flex items-center justify-between text-[11px] text-slate-400">
           <span>顯示區已鎖定約 5 檔高度；若標的超過可視範圍，請在表格內上下滾動。</span>
           <span>{rows.length} 檔標的</span>
@@ -912,7 +912,7 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
 }
 
 function FrameworkTable({ title, subtitle, result, showScore = false, horizon, onWeightChange, onResetHorizon }) {
-  return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{title}</h3><p className="text-sm text-slate-500 mt-1">{subtitle}</p></div>{horizon && onResetHorizon && <Button variant="outline" size="sm" onClick={() => onResetHorizon(horizon)} className="shrink-0">恢復預設值</Button>}</div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1180px] text-sm"><colgroup><col className="w-[110px]" /><col /><col className="w-[130px]" /><col className="w-[145px]" /><col className="w-[170px]" /><col /><col className="w-[320px]" /></colgroup><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="px-3 py-2">維度</th><th className="px-3 py-2">指標 / 資料檢查</th><th className="px-4 py-2">權重</th><th className="px-4 py-2">狀態</th><th className="px-3 py-2">今日現況</th><th className="px-3 py-2">規則 / 數據</th><th className="px-3 py-2">資料來源</th></tr></thead><tbody>{result.rows.map((row) => <tr key={`${row.dimension}-${row.item}`} className="border-b last:border-0"><td className="px-3 py-2 align-top font-medium">{row.dimension}</td><td className="px-3 py-2 align-top">{row.item}</td><td className="px-4 py-2 align-top">{horizon && row.weightKey && onWeightChange ? <Input type="number" step="0.01" min="0" max="1" value={row.weight} onChange={(e) => onWeightChange(horizon, row.weightKey, e.target.value)} className="h-9 w-24 rounded-lg border-slate-300 text-right font-medium" /> : row.weight.toFixed(2)}</td><td className="px-4 py-2 align-top"><div className="flex min-h-[36px] items-center pl-1"><StatusBadge text={row.status} /></div></td><td className="px-3 py-2 align-top">{compareBadge(row.score)}</td><td className="px-3 py-2 align-top text-slate-600">{row.rule}</td><td className="px-3 py-2 align-top text-slate-500">{row.source}</td></tr>)}{showScore && <tr className="bg-slate-50 font-semibold"><td className="px-3 py-2" colSpan={2}>權重合計 / 加權得分</td><td className="px-4 py-2">{result.totalWeight.toFixed(2)}</td><td className="px-4 py-2"></td><td className="px-3 py-2"></td><td className="px-3 py-2">{result.total.toFixed(2)}</td><td className="px-3 py-2">直接修改上方權重欄位；合計建議維持 1.00。</td></tr>}</tbody></table></div></CardContent></Card>;
+  return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><h3 className="text-lg font-semibold">{title}</h3><p className="text-[15px] text-slate-500 mt-1">{subtitle}</p></div>{horizon && onResetHorizon && <Button variant="outline" size="sm" onClick={() => onResetHorizon(horizon)} className="shrink-0">恢復預設值</Button>}</div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1320px] text-[15px]"><colgroup><col className="w-[112px]" /><col className="w-[360px]" /><col className="w-[104px]" /><col className="w-[150px]" /><col className="w-[150px]" /><col className="w-[220px]" /><col className="w-[340px]" /></colgroup><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="px-3 py-3">維度</th><th className="px-3 py-3 whitespace-nowrap">指標 / 資料檢查</th><th className="px-3 py-3 text-center">權重</th><th className="px-3 py-3 text-center">狀態</th><th className="px-3 py-3 text-center">今日現況</th><th className="px-3 py-3">規則 / 數據</th><th className="px-3 py-3">資料來源</th></tr></thead><tbody>{result.rows.map((row) => <tr key={`${row.dimension}-${row.item}`} className="border-b last:border-0"><td className="px-3 py-3 align-top font-medium whitespace-nowrap">{row.dimension}</td><td className="px-3 py-3 align-top whitespace-nowrap leading-6">{row.item}</td><td className="px-3 py-3 align-top text-center">{horizon && row.weightKey && onWeightChange ? <Input type="number" step="0.01" min="0" max="1" value={row.weight} onChange={(e) => onWeightChange(horizon, row.weightKey, e.target.value)} className="mx-auto h-8 w-20 rounded-lg border-slate-300 px-2 text-right text-[15px] font-medium" /> : row.weight.toFixed(2)}</td><td className="px-3 py-3 align-top"><div className="flex min-h-[32px] items-center justify-center"><StatusBadge text={row.status} /></div></td><td className="px-3 py-3 align-top text-center">{compareBadge(row.score)}</td><td className="px-3 py-3 align-top text-slate-600 leading-6">{row.rule}</td><td className="px-3 py-3 align-top text-slate-500 leading-6">{row.source}</td></tr>)}{showScore && <tr className="bg-slate-50 font-semibold"><td className="px-3 py-3" colSpan={2}>權重合計 / 加權得分</td><td className="px-3 py-3 text-center">{result.totalWeight.toFixed(2)}</td><td className="px-3 py-3"></td><td className="px-3 py-3"></td><td className="px-3 py-3">{result.total.toFixed(2)}</td><td className="px-3 py-3">直接修改上方權重欄位；合計建議維持 1.00。</td></tr>}</tbody></table></div></CardContent></Card>;
 }
 
 function WeightSettingsPanel({ weightConfig, onWeightChange, onReset }) {
@@ -1189,12 +1189,12 @@ export default function StockShortV1App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 text-slate-900"><div className="mx-auto max-w-7xl space-y-3">
-      <div><h1 className="text-2xl font-bold tracking-tight">股票短中長分析 App — V1</h1><p className="text-sm text-slate-500 mt-1">先做全部股票 / ETF 總覽，再點進單檔細節。短線 V1 維持原三大面向，並加入停損閘門；中線與長線公式尚未啟用。</p></div>
+    <div className="min-h-screen bg-slate-50 p-3 text-[15px] text-slate-900"><div className="mx-auto max-w-7xl space-y-3">
+      <div><h1 className="text-3xl font-bold tracking-tight">股票短中長分析 App — V1</h1><p className="text-[15px] text-slate-500 mt-1">先做全部股票 / ETF 總覽，再點進單檔細節。短線 V1 維持原三大面向，並加入停損閘門；中線與長線公式尚未啟用。</p></div>
       <AddAssetForm value={newAsset} onChange={setNewAsset} onAdd={addAsset} error={addError} />
       <OverviewTable rows={overviewRows} selected={selected} onSelect={setSelected} onInsight={(symbol, horizon) => { setSelected(symbol); setInsightTarget({ symbol, horizon }); }} onRemove={removeAsset} dataMode={dataMode} />
       <InsightPanel insight={activeInsight} />
-      <Tabs defaultValue="short" className="space-y-3"><TabsList className="flex w-full flex-wrap gap-1 rounded-xl"><TabsTrigger value="short" className="min-w-[88px]">短線V1</TabsTrigger><TabsTrigger value="mid" className="min-w-[88px]">中線V1</TabsTrigger><TabsTrigger value="long" className="min-w-[88px]">長線V1</TabsTrigger><TabsTrigger value="sources" className="min-w-[88px]">資料源</TabsTrigger><TabsTrigger value="validate" className="min-w-[88px]">資料驗證</TabsTrigger><TabsTrigger value="tests" className="min-w-[88px]">測試</TabsTrigger></TabsList>
+      <Tabs defaultValue="short" className="space-y-3"><TabsList className="grid w-full grid-cols-6 rounded-xl p-1.5"><TabsTrigger value="short" className="py-2.5">短線V1</TabsTrigger><TabsTrigger value="mid" className="py-2.5">中線V1</TabsTrigger><TabsTrigger value="long" className="py-2.5">長線V1</TabsTrigger><TabsTrigger value="sources" className="py-2.5">資料源</TabsTrigger><TabsTrigger value="validate" className="py-2.5">資料驗證</TabsTrigger><TabsTrigger value="tests" className="py-2.5">測試</TabsTrigger></TabsList>
         <TabsContent value="short"><FrameworkTable title="圖片版短線評分表" subtitle="可直接在表格的權重欄位手動調整；新增基本面與衍生性金融商品預設權重為 0。" result={shortV1} showScore horizon="short" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /><div className="grid gap-3 md:grid-cols-5 mt-3">{shortV1.dimensions.map((dim) => <DimensionScoreCard key={dim.dimension} dim={dim} />)}</div></TabsContent>
         <TabsContent value="mid"><FrameworkTable title="中線 V1 架構表" subtitle={getFrameworkAnalysis("中線", midV1)} result={midV1} showScore horizon="mid" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /></TabsContent>
         <TabsContent value="long"><FrameworkTable title="長線 V1 架構表" subtitle={getFrameworkAnalysis("長線", longV1)} result={longV1} showScore horizon="long" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /></TabsContent>
