@@ -94,7 +94,7 @@ function loadPersistedStocks() {
   }
 }
 
-const DEFAULT_GOOGLE_SHEET_CSV_URL = "";
+const DEFAULT_GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTwI6HZIQcKRt3H9MCDW4kRynUlkMtR1KnzUYpGpXMhNErX-LrO3ejwbJ7hD9R_BfaOXtCaSo6nhhf_/pub?output=csv";
 const DEFAULT_FINMIND_PROXY_URL = "/api/finmind/stocks";
 const DEFAULT_FINMIND_MARKET_PROXY_URL = "/api/finmind/market";
 const DEFAULT_FINMIND_DERIVATIVES_PROXY_URL = "/api/finmind/derivatives";
