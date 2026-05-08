@@ -2,246 +2,261 @@
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-const FINMIND_API_URL = "https://api.finmindtrade.com/api/v4/data";
-const DEFAULT_SYMBOLS = ["2330", "2454", "3231", "2317", "6446", "0050"];
+const STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
+const BWIBBU_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL";
 
-function yyyyMmDd(date: Date) {
-  return date.toISOString().slice(0, 10);
+function normalizeStockSymbol(value) {
+  const raw = String(value ?? "").trim().toUpperCase();
+  let cleaned = raw;
+  if (cleaned.startsWith("TPE:")) cleaned = cleaned.slice(4);
+  if (cleaned.startsWith("TWO:")) cleaned = cleaned.slice(4);
+  if (cleaned.endsWith(".TW")) cleaned = cleaned.slice(0, -3);
+  if (cleaned.endsWith(".TWO")) cleaned = cleaned.slice(0, -4);
+  cleaned = cleaned.split("").filter((ch) => /[0-9A-Z]/.test(ch)).join("");
+  if (/^[0-9]{1,4}$/.test(cleaned)) return cleaned.padStart(4, "0");
+  return cleaned;
 }
 
-function daysAgo(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return yyyyMmDd(date);
-}
-
-function parseSymbols(input: string | null) {
-  const raw = input || DEFAULT_SYMBOLS.join(",");
+function parseList(input, fallback = ["2330", "0050"], max = 50) {
+  const raw = input || fallback.join(",");
   return raw
     .split(",")
-    .map((x) => x.trim().toUpperCase())
+    .map((x) => normalizeStockSymbol(x))
     .filter(Boolean)
-    .slice(0, 20);
+    .slice(0, max);
 }
 
-function toNumber(value: unknown, fallback = 0) {
-  const raw = String(value ?? "").replace(/,/g, "").trim();
+function getAny(row, keys, fallback = "") {
+  for (const key of keys) {
+    if (row && row[key] !== undefined && row[key] !== null && row[key] !== "") return row[key];
+  }
+  return fallback;
+}
+
+function repairMojibake(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return text;
+
+  // TWSE OpenAPI 偶爾在 Node / Windows / fetch chain 中會出現 UTF-8 被當 latin1 解讀的 mojibake：
+  // 例如「聯發科」變成「è¯ç¼ç§」，「股票」變成「è¡ç¥¨」。
+  // 這裡只在偵測到典型 mojibake 字元時修正，避免誤改正常中文。
+  if (/[ÃÂâèéåçæ]/.test(text)) {
+    try {
+      const repaired = Buffer.from(text, "latin1").toString("utf8");
+      if (/[^\u0000-\u007f]/.test(repaired)) return repaired.trim();
+    } catch {
+      // ignore
+    }
+  }
+
+  return text;
+}
+
+function toNumber(value, fallback = null) {
+  const raw = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/%/g, "")
+    .trim();
+
   if (!raw || raw === "-" || raw === "--" || raw.toUpperCase() === "N/A") return fallback;
 
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
 }
 
-function average(values: number[]) {
-  const clean = values.filter((x) => Number.isFinite(x));
-  if (!clean.length) return 0;
-  return clean.reduce((sum, x) => sum + x, 0) / clean.length;
-}
+function normalizePriceRow(row) {
+  const symbol = normalizeStockSymbol(
+    getAny(row, ["Code", "code", "證券代號", "股票代號", "stockNo", "stock_id", "Symbol"])
+  );
+  if (!symbol) return null;
 
-function calcRsi(closes: number[], period = 14) {
-  if (closes.length <= period) return 50;
+  const name = repairMojibake(
+    getAny(row, ["Name", "name", "證券名稱", "股票名稱", "stock_name"], symbol)
+  );
 
-  const recent = closes.slice(-(period + 1));
-  let gains = 0;
-  let losses = 0;
+  const close = toNumber(
+    getAny(row, ["ClosingPrice", "Closing Price", "Closing_Price", "收盤價", "close", "Close"]),
+    null
+  );
 
-  for (let i = 1; i < recent.length; i += 1) {
-    const diff = recent[i] - recent[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses += Math.abs(diff);
-  }
+  const open = toNumber(getAny(row, ["OpeningPrice", "Opening Price", "開盤價", "open", "Open"]), null);
+  const high = toNumber(getAny(row, ["HighestPrice", "Highest Price", "最高價", "high", "High"]), null);
+  const low = toNumber(getAny(row, ["LowestPrice", "Lowest Price", "最低價", "low", "Low"]), null);
 
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
+  const prevClose = toNumber(
+    getAny(row, ["PreviousClose", "Previous Close", "ReferencePrice", "referencePrice", "參考價", "昨收"]),
+    close
+  );
 
-  if (avgLoss === 0) return 100;
+  const volume = toNumber(
+    getAny(row, ["TradeVolume", "TradingVolume", "Trading_Volume", "成交股數", "成交量", "volume", "Volume"]),
+    null
+  );
 
-  const rs = avgGain / avgLoss;
-  return Math.max(0, Math.min(100, 100 - 100 / (1 + rs)));
-}
+  const tradeValue = toNumber(
+    getAny(row, ["TradeValue", "成交金額", "tradeValue"]),
+    null
+  );
 
-function getRequestToken(request: Request) {
-  const userToken = request.headers.get("x-finmind-token") || "";
-  const serverToken = process.env.FINMIND_TOKEN || "";
-
-  return {
-    token: userToken || serverToken,
-    tokenSource: userToken ? "user_header" : serverToken ? "server_env" : "missing",
-  };
-}
-
-async function fetchFinMind(dataset: string, params: Record<string, string>, token: string) {
-  const url = new URL(FINMIND_API_URL);
-
-  url.searchParams.set("dataset", dataset);
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, value);
-    }
-  });
-
-  const res = await fetch(url.toString(), {
-    cache: "no-store",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-
-  const json = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    throw new Error(`${dataset} HTTP ${res.status}: ${json?.msg || json?.message || "request failed"}`);
-  }
-
-  if (json?.status === 402 || json?.status === 403 || json?.status === 429) {
-    throw new Error(`${dataset} FinMind status ${json.status}: ${json?.msg || json?.message || "limited or blocked"}`);
-  }
-
-  return Array.isArray(json?.data) ? json.data : [];
-}
-
-async function buildStock(symbol: string, token: string) {
-  const startDate = daysAgo(120);
-  const endDate = yyyyMmDd(new Date());
-
-  const [priceRows, perRows] = await Promise.all([
-    fetchFinMind(
-      "TaiwanStockPrice",
-      { data_id: symbol, start_date: startDate, end_date: endDate },
-      token
-    ),
-    fetchFinMind(
-      "TaiwanStockPER",
-      { data_id: symbol, start_date: startDate, end_date: endDate },
-      token
-    ).catch(() => []),
-  ]);
-
-  const sorted = priceRows
-    .map((row: any) => ({
-      date: String(row.date || ""),
-      stock_id: String(row.stock_id || symbol),
-      close: toNumber(row.close),
-      max: toNumber(row.max, toNumber(row.close)),
-      min: toNumber(row.min, toNumber(row.close)),
-      Trading_Volume: toNumber(row.Trading_Volume || row.trading_volume || row.volume),
-    }))
-    .filter((row) => row.date && Number.isFinite(row.close) && row.close > 0)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (!sorted.length) {
-    return { symbol, error: "NO_PRICE_DATA" };
-  }
-
-  const latest = sorted[sorted.length - 1];
-  const previous = sorted[sorted.length - 2] || latest;
-  const last20 = sorted.slice(-20);
-  const closes = sorted.map((row) => row.close);
-  const perLatest: any = Array.isArray(perRows) && perRows.length ? perRows[perRows.length - 1] : {};
-
-  const price = latest.close;
-  const close20Ago = sorted.length > 20 ? sorted[sorted.length - 21].close : sorted[0].close;
-  const close60Ago = sorted.length > 60 ? sorted[sorted.length - 61].close : sorted[0].close;
+  const date = String(getAny(row, ["Date", "date", "資料日期", "statDate"], "")).trim();
 
   return {
     symbol,
     stock_id: symbol,
-    name: symbol,
+    name,
     market: "TWSE",
     type: /^00/.test(symbol) ? "ETF" : "股票",
-
-    price,
-    close: price,
-    prevClose: previous.close,
-    previous_close: previous.close,
-
-    high20: Math.max(...last20.map((row) => row.max)),
-    low20: Math.min(...last20.map((row) => row.min)),
-    volume: latest.Trading_Volume,
-    avgVolume20: average(last20.map((row) => row.Trading_Volume)),
-
-    ma5: average(closes.slice(-5)),
-    ma20: average(closes.slice(-20)),
-    ma60: average(closes.slice(-60)),
-    rsi14: Number(calcRsi(closes).toFixed(1)),
-
-    return20d: close20Ago > 0 ? Number((((price - close20Ago) / close20Ago) * 100).toFixed(1)) : 0,
-    return60d: close60Ago > 0 ? Number((((price - close60Ago) / close60Ago) * 100).toFixed(1)) : 0,
-
-    per: toNumber(perLatest.PER || perLatest.per || perLatest.PEratio, 0),
-    pbr: toNumber(perLatest.PBR || perLatest.pbr || perLatest.PBratio, 0),
-    dividendYield: toNumber(
-      perLatest.dividend_yield ||
-        perLatest.DividendYield ||
-        perLatest["殖利率"] ||
-        perLatest["殖利率(%)"],
-      0
-    ),
-
-    updatedAt: latest.date,
-    sourceNote: "FinMind TaiwanStockPrice + TaiwanStockPER",
+    price: close,
+    close,
+    prevClose,
+    previous_close: prevClose,
+    open,
+    high,
+    low,
+    high20: high,
+    low20: low,
+    volume,
+    avgVolume20: volume,
+    tradeValue,
+    updatedAt: date,
+    sourceNote: "TWSE OpenAPI STOCK_DAY_ALL",
   };
 }
 
-export async function GET(request: Request) {
-  const { token, tokenSource } = getRequestToken(request);
+function normalizeBwibbuRow(row) {
+  const symbol = normalizeStockSymbol(
+    getAny(row, ["Code", "code", "證券代號", "股票代號", "stockNo", "stock_id", "Symbol"])
+  );
+  if (!symbol) return null;
 
-  if (!token) {
+  const name = repairMojibake(
+    getAny(row, ["Name", "name", "證券名稱", "股票名稱", "stock_name"], symbol)
+  );
+
+  const per = toNumber(getAny(row, ["PEratio", "P/E ratio", "本益比", "PER", "per"]), null);
+  const dividendYield = toNumber(
+    getAny(row, ["DividendYield", "Dividend yield", "殖利率(%)", "殖利率", "dividendYield", "dividend_yield"]),
+    null
+  );
+  const pbr = toNumber(getAny(row, ["PBratio", "P/B ratio", "股價淨值比", "PBR", "pbr"]), null);
+
+  return {
+    symbol,
+    stock_id: symbol,
+    name,
+    per,
+    pbr,
+    dividendYield,
+    sourceNote: "TWSE OpenAPI BWIBBU_ALL",
+  };
+}
+
+function mergeRows(priceRows, valuationRows) {
+  const map = new Map();
+
+  priceRows.filter(Boolean).forEach((row) => {
+    map.set(row.symbol, { ...row });
+  });
+
+  valuationRows.filter(Boolean).forEach((row) => {
+    const previous = map.get(row.symbol) || {
+      symbol: row.symbol,
+      stock_id: row.symbol,
+      name: row.name || row.symbol,
+      market: "TWSE",
+      type: /^00/.test(row.symbol) ? "ETF" : "股票",
+    };
+
+    map.set(row.symbol, {
+      ...previous,
+      name: previous.name && previous.name !== previous.symbol ? previous.name : row.name || previous.name,
+      per: row.per ?? previous.per,
+      pbr: row.pbr ?? previous.pbr,
+      dividendYield: row.dividendYield ?? previous.dividendYield,
+      sourceNote: [previous.sourceNote, row.sourceNote].filter(Boolean).join(" + "),
+    });
+  });
+
+  return Array.from(map.values());
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "stock-score-online/1.0",
+    },
+  });
+
+  if (!res.ok) throw new Error(`TWSE OpenAPI HTTP ${res.status}: ${url}`);
+
+  return res.json();
+}
+
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const requestedSymbols = parseList(searchParams.get("symbols"));
+
+    const [stockDayJson, bwibbuJson] = await Promise.all([
+      fetchJson(STOCK_DAY_ALL_URL),
+      fetchJson(BWIBBU_ALL_URL),
+    ]);
+
+    const stockDayRows = Array.isArray(stockDayJson) ? stockDayJson : Array.isArray(stockDayJson?.data) ? stockDayJson.data : [];
+    const bwibbuRows = Array.isArray(bwibbuJson) ? bwibbuJson : Array.isArray(bwibbuJson?.data) ? bwibbuJson.data : [];
+
+    const merged = mergeRows(
+      stockDayRows.map(normalizePriceRow).filter(Boolean),
+      bwibbuRows.map(normalizeBwibbuRow).filter(Boolean)
+    );
+
+    const bySymbol = new Map(merged.map((row) => [row.symbol, row]));
+    const stocks = requestedSymbols
+      .map((symbol) => bySymbol.get(symbol))
+      .filter(Boolean);
+
+    const missingSymbols = requestedSymbols.filter((symbol) => !bySymbol.has(symbol));
+
+    return NextResponse.json(
+      {
+        ok: true,
+        source: "twse_proxy",
+        requestedSymbols,
+        count: stocks.length,
+        stocks,
+        missingSymbols,
+        fetchedAt: new Date().toISOString(),
+        upstream: {
+          stockDayUrl: STOCK_DAY_ALL_URL,
+          bwibbuUrl: BWIBBU_ALL_URL,
+          stockDayRows: stockDayRows.length,
+          bwibbuRows: bwibbuRows.length,
+        },
+      },
+      {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+        },
+      }
+    );
+  } catch (error) {
     return NextResponse.json(
       {
         ok: false,
-        message: "Missing FinMind token. Set FINMIND_TOKEN in .env.local or send X-FinMind-Token header.",
+        source: "twse_proxy",
+        message: error?.message || String(error),
+        fetchedAt: new Date().toISOString(),
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+        },
+      }
     );
   }
-
-  const { searchParams } = new URL(request.url);
-  const symbols = parseSymbols(searchParams.get("symbols"));
-
-  const results = await Promise.allSettled(
-    symbols.map((symbol) => buildStock(symbol, token))
-  );
-
-  const stocks = results
-    .map((result, index) => {
-      if (result.status === "fulfilled") return result.value;
-      return {
-        symbol: symbols[index],
-        error: result.reason?.message || "UNKNOWN_ERROR",
-      };
-    })
-    .filter((row: any) => !row.error);
-
-  const errors = results
-    .map((result, index) => {
-      if (result.status === "rejected") {
-        return {
-          symbol: symbols[index],
-          error: result.reason?.message || "UNKNOWN_ERROR",
-        };
-      }
-
-      const value: any = result.value;
-      if (value?.error) {
-        return {
-          symbol: symbols[index],
-          error: value.error,
-        };
-      }
-
-      return null;
-    })
-    .filter(Boolean);
-
-  return NextResponse.json({
-    ok: true,
-    source: "finmind_proxy",
-    tokenSource,
-    requestedSymbols: symbols,
-    count: stocks.length,
-    stocks,
-    errors,
-    fetchedAt: new Date().toISOString(),
-  });
 }
