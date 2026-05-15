@@ -87,6 +87,294 @@ function calcRsi(closes: number[], period = 14) {
   return Math.max(0, Math.min(100, 100 - 100 / (1 + rs)));
 }
 
+
+function roundOptional(value: unknown, digits = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Number(n.toFixed(digits));
+}
+
+function calcEmaSeries(values: number[], period: number) {
+  const clean = values.map(Number).filter(Number.isFinite);
+  if (clean.length < period) return [];
+
+  const multiplier = 2 / (period + 1);
+  const ema: number[] = [];
+  let previous = average(clean.slice(0, period));
+
+  for (let i = 0; i < clean.length; i += 1) {
+    if (i < period - 1) {
+      ema.push(null as any);
+      continue;
+    }
+
+    if (i === period - 1) {
+      ema.push(previous);
+      continue;
+    }
+
+    previous = (clean[i] - previous) * multiplier + previous;
+    ema.push(previous);
+  }
+
+  return ema;
+}
+
+function calcMacd(closes: number[]) {
+  const rowCount = Array.isArray(closes) ? closes.length : 0;
+  if (!Array.isArray(closes) || rowCount < 35) {
+    return {
+      macd: null,
+      macdSignal: null,
+      macdHist: null,
+      macdHistPrev1: null,
+      macdHistPrev3: null,
+      macdHistDelta3: null,
+      macdHistTrend3: "資料不足",
+      macdState: "資料不足",
+      macdWarmupReady: false,
+    };
+  }
+
+  const ema12 = calcEmaSeries(closes, 12);
+  const ema26 = calcEmaSeries(closes, 26);
+  const diffs = closes.map((_, index) => {
+    const fast = ema12[index];
+    const slow = ema26[index];
+    return Number.isFinite(fast) && Number.isFinite(slow) ? fast - slow : null;
+  });
+
+  const validDiffs = diffs.filter((x) => Number.isFinite(Number(x))).map(Number);
+  if (validDiffs.length < 9) {
+    return {
+      macd: null,
+      macdSignal: null,
+      macdHist: null,
+      macdHistPrev1: null,
+      macdHistPrev3: null,
+      macdHistDelta3: null,
+      macdHistTrend3: "資料不足",
+      macdState: "資料不足",
+      macdWarmupReady: false,
+    };
+  }
+
+  const signalCompact = calcEmaSeries(validDiffs, 9);
+  const histSeries = validDiffs.map((macd, index) => {
+    const signal = signalCompact[index];
+    return Number.isFinite(signal) ? macd - signal : null;
+  });
+
+  const latestMacd = validDiffs[validDiffs.length - 1];
+  const previousMacd = validDiffs[validDiffs.length - 2] ?? latestMacd;
+  const latestSignal = signalCompact[signalCompact.length - 1];
+  const previousSignal = signalCompact[signalCompact.length - 2] ?? latestSignal;
+  const latestHist = histSeries[histSeries.length - 1];
+  const previousHist = histSeries[histSeries.length - 2] ?? latestHist;
+  const prev3Hist = histSeries.length > 3 ? histSeries[histSeries.length - 4] : previousHist;
+  const histDelta3 = Number.isFinite(Number(latestHist)) && Number.isFinite(Number(prev3Hist))
+    ? Number(latestHist) - Number(prev3Hist)
+    : null;
+
+  const recentHist = histSeries.slice(-4).filter((x) => Number.isFinite(Number(x))).map(Number);
+  let macdHistTrend3 = "中性";
+  if (recentHist.length >= 4) {
+    const deltas = recentHist.slice(1).map((value, index) => value - recentHist[index]);
+    const up = deltas.filter((x) => x > 0).length;
+    const down = deltas.filter((x) => x < 0).length;
+    if (up >= 2) macdHistTrend3 = "3日擴大";
+    else if (down >= 2) macdHistTrend3 = "3日收斂";
+  }
+
+  let macdState = "中性整理";
+  if (Number.isFinite(latestMacd) && Number.isFinite(latestSignal) && Number.isFinite(Number(latestHist))) {
+    if (previousHist !== null && previousHist <= 0 && Number(latestHist) > 0) macdState = "趨勢剛轉強";
+    else if (previousHist !== null && previousHist >= 0 && Number(latestHist) < 0) macdState = "趨勢剛轉弱";
+    else if (Number(latestHist) > 0 && macdHistTrend3 === "3日擴大") macdState = "多方動能擴大";
+    else if (Number(latestHist) > 0) macdState = "多方動能收斂";
+    else if (Number(latestHist) < 0 && macdHistTrend3 === "3日收斂") macdState = "空方動能收斂";
+    else if (Number(latestHist) < 0) macdState = "空方動能擴大";
+  }
+
+  return {
+    macd: roundOptional(latestMacd, 3),
+    macdSignal: roundOptional(latestSignal, 3),
+    macdHist: roundOptional(latestHist, 3),
+    macdHistPrev1: roundOptional(previousHist, 3),
+    macdHistPrev3: roundOptional(prev3Hist, 3),
+    macdHistDelta3: roundOptional(histDelta3, 3),
+    macdHistTrend3,
+    macdState,
+    macdWarmupReady: rowCount >= 100,
+  };
+}
+
+function calcKd(rows: Array<{ max: number; min: number; close: number }>, period = 9) {
+  const rowCount = Array.isArray(rows) ? rows.length : 0;
+  if (!Array.isArray(rows) || rowCount < period) {
+    return {
+      k9: null,
+      d9: null,
+      j9: null,
+      k9Prev1: null,
+      d9Prev1: null,
+      kdDiff: null,
+      kdDiffPrev1: null,
+      kdDiffTrend3: "資料不足",
+      kdCross: "資料不足",
+      kdState: "資料不足",
+      kdWarmupReady: false,
+    };
+  }
+
+  let k = 50;
+  let d = 50;
+  const series: Array<{ k: number; d: number; j: number }> = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const window = rows.slice(Math.max(0, i - period + 1), i + 1);
+    if (window.length < period) continue;
+
+    const high = Math.max(...window.map((row) => row.max));
+    const low = Math.min(...window.map((row) => row.min));
+    const close = rows[i].close;
+    const rsv = high !== low ? ((close - low) / (high - low)) * 100 : 50;
+
+    k = (2 / 3) * k + (1 / 3) * rsv;
+    d = (2 / 3) * d + (1 / 3) * k;
+    series.push({ k, d, j: 3 * k - 2 * d });
+  }
+
+  const latest = series[series.length - 1];
+  const previous = series[series.length - 2] || latest;
+  if (!latest) {
+    return {
+      k9: null,
+      d9: null,
+      j9: null,
+      k9Prev1: null,
+      d9Prev1: null,
+      kdDiff: null,
+      kdDiffPrev1: null,
+      kdDiffTrend3: "資料不足",
+      kdCross: "資料不足",
+      kdState: "資料不足",
+      kdWarmupReady: false,
+    };
+  }
+
+  const diff = latest.k - latest.d;
+  const prevDiff = previous.k - previous.d;
+  const recentDiffs = series.slice(-3).map((x) => x.k - x.d);
+  const positiveDays = recentDiffs.filter((x) => x > 0).length;
+  const negativeDays = recentDiffs.filter((x) => x < 0).length;
+  const kdDiffTrend3 = positiveDays >= 2 ? "3日偏多" : negativeDays >= 2 ? "3日偏弱" : "中性";
+  const kdCross = prevDiff <= 0 && diff > 0 ? "K上穿D" : prevDiff >= 0 && diff < 0 ? "K下穿D" : "未交叉";
+
+  let kdState = "中性整理";
+  if (latest.k >= 80 && latest.d >= 80 && kdCross === "K下穿D") kdState = "高檔轉弱";
+  else if (latest.k >= 80 && latest.d >= 80 && diff >= 0) kdState = "高檔強勢";
+  else if (latest.k <= 20 && latest.d <= 20 && kdCross === "K上穿D") kdState = "低檔轉強";
+  else if (latest.k <= 20 && latest.d <= 20 && diff < 0) kdState = "低檔弱勢";
+  else if (kdCross === "K下穿D" && latest.k > 20 && latest.k < 80 && latest.d > 20 && latest.d < 80) kdState = "短線轉弱";
+  else if (kdCross === "K上穿D" && latest.k > 20 && latest.k < 80 && latest.d > 20 && latest.d < 80) kdState = "短線轉強";
+  else if (diff > 0 && kdDiffTrend3 === "3日偏多") kdState = "短線偏多";
+  else if (diff > 0) kdState = latest.k <= 30 || latest.d <= 30 ? "低檔轉強" : "短線轉強";
+  else if (diff < 0 && kdDiffTrend3 === "3日偏弱") kdState = "短線偏弱";
+  else if (diff < 0) kdState = latest.k >= 80 || latest.d >= 80 ? "高檔轉弱" : "短線轉弱";
+
+  return {
+    k9: roundOptional(latest.k, 1),
+    d9: roundOptional(latest.d, 1),
+    j9: roundOptional(latest.j, 1),
+    k9Prev1: roundOptional(previous.k, 1),
+    d9Prev1: roundOptional(previous.d, 1),
+    kdDiff: roundOptional(diff, 2),
+    kdDiffPrev1: roundOptional(prevDiff, 2),
+    kdDiffTrend3,
+    kdCross,
+    kdState,
+    kdWarmupReady: rowCount >= 40,
+  };
+}
+
+function calcAtr(rows: Array<{ max: number; min: number; close: number }>, period = 14) {
+  const rowCount = Array.isArray(rows) ? rows.length : 0;
+  if (!Array.isArray(rows) || rowCount <= period) {
+    return {
+      atr14: null,
+      atrPct: null,
+      atrPctAvg20: null,
+      atrPctVsAvg20: null,
+      volatilityState: "資料不足",
+      atrWarmupReady: false,
+    };
+  }
+
+  const trs: number[] = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const high = Number(rows[i].max);
+    const low = Number(rows[i].min);
+    const prevClose = Number(rows[i - 1].close);
+
+    if (![high, low, prevClose].every(Number.isFinite)) continue;
+
+    trs.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+  }
+
+  if (trs.length < period) {
+    return {
+      atr14: null,
+      atrPct: null,
+      atrPctAvg20: null,
+      atrPctVsAvg20: null,
+      volatilityState: "資料不足",
+      atrWarmupReady: false,
+    };
+  }
+
+  let atr = average(trs.slice(0, period));
+  const atrSeries: number[] = [];
+  for (let i = period; i < trs.length; i += 1) {
+    atr = ((atr * (period - 1)) + trs[i]) / period;
+    atrSeries.push(atr);
+  }
+
+  const latestClose = rows[rows.length - 1]?.close;
+  const atrPct = latestClose ? (atr / latestClose) * 100 : null;
+  const atrPctSeries = atrSeries.map((value, index) => {
+    const rowIndex = index + period + 1;
+    const close = rows[rowIndex]?.close;
+    return close ? (value / close) * 100 : null;
+  }).filter((x) => Number.isFinite(Number(x))).map(Number);
+  const atrPctAvg20 = atrPctSeries.length >= 20 ? average(atrPctSeries.slice(-20)) : null;
+  const atrPctVsAvg20 = Number.isFinite(Number(atrPct)) && Number.isFinite(Number(atrPctAvg20)) && Number(atrPctAvg20) > 0
+    ? ((Number(atrPct) - Number(atrPctAvg20)) / Number(atrPctAvg20)) * 100
+    : null;
+
+  let volatilityState = "波動正常";
+  if (Number.isFinite(Number(atrPctVsAvg20))) {
+    if (Number(atrPctVsAvg20) > 50) volatilityState = "波動過大";
+    else if (Number(atrPctVsAvg20) > 20) volatilityState = "波動升高";
+    else if (Number(atrPctVsAvg20) < -25) volatilityState = "波動低";
+    else volatilityState = "波動正常";
+  } else if (Number.isFinite(Number(atrPct))) {
+    if (Number(atrPct) < 1.5) volatilityState = "波動低";
+    else if (Number(atrPct) <= 3.5) volatilityState = "波動正常";
+    else if (Number(atrPct) <= 5.5) volatilityState = "波動升高";
+    else volatilityState = "波動過大";
+  }
+
+  return {
+    atr14: roundOptional(atr, 2),
+    atrPct: roundOptional(atrPct, 2),
+    atrPctAvg20: roundOptional(atrPctAvg20, 2),
+    atrPctVsAvg20: roundOptional(atrPctVsAvg20, 1),
+    volatilityState,
+    atrWarmupReady: rowCount >= 100,
+  };
+}
+
 function getRequestToken(request: Request) {
   const userToken = request.headers.get("x-finmind-token") || "";
   const serverToken = process.env.FINMIND_TOKEN || "";
@@ -341,38 +629,131 @@ function summarizeRevenueRows(rows: any[]) {
   };
 }
 
+function pickValueFromSnapshot(snapshot: any, typeCandidates: string[]) {
+  const lower = new Map<string, any>();
+  Object.keys(snapshot || {}).forEach((key) => lower.set(String(key).toLowerCase(), snapshot[key]));
+
+  for (const type of typeCandidates) {
+    const value = lower.get(String(type).toLowerCase());
+    if (value !== null && value !== undefined && value !== "") return toOptionalNumber(value);
+  }
+
+  return null;
+}
+
+function buildFinancialQuarterSnapshots(rows: any[]) {
+  const dateMap = new Map<string, any>();
+
+  latestRowsByDate(rows).forEach((row) => {
+    const date = String(row.date || "");
+    const type = String(row.type || "");
+    if (!date || !type) return;
+    if (!dateMap.has(date)) dateMap.set(date, { date });
+    dateMap.get(date)[type] = row.value;
+  });
+
+  return Array.from(dateMap.values())
+    .map((snapshot) => {
+      const eps = pickValueFromSnapshot(snapshot, ["EPS"]);
+      const grossProfit = pickValueFromSnapshot(snapshot, ["GrossProfit"]);
+      const operatingIncome = pickValueFromSnapshot(snapshot, [
+        "OperatingIncome",
+        "OperatingProfit",
+        "NetOperatingIncome",
+      ]);
+      const revenue = pickValueFromSnapshot(snapshot, [
+        "Revenue",
+        "OperatingRevenue",
+        "TotalRevenue",
+        "Income",
+      ]);
+      const incomeAfterTaxes = pickValueFromSnapshot(snapshot, ["IncomeAfterTaxes"]);
+
+      return {
+        date: snapshot.date,
+        eps,
+        grossProfit,
+        operatingIncome,
+        financialRevenue: revenue,
+        incomeAfterTaxes,
+        grossMargin:
+          revenue && grossProfit !== null
+            ? Number(((Number(grossProfit) / Number(revenue)) * 100).toFixed(2))
+            : null,
+        operatingMargin:
+          revenue && operatingIncome !== null
+            ? Number(((Number(operatingIncome) / Number(revenue)) * 100).toFixed(2))
+            : null,
+        netMargin:
+          revenue && incomeAfterTaxes !== null
+            ? Number(((Number(incomeAfterTaxes) / Number(revenue)) * 100).toFixed(2))
+            : null,
+      };
+    })
+    .filter((snapshot) => snapshot.date)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+}
+
+function sumRecentFinite(values: any[], limit: number) {
+  const clean = values
+    .filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)))
+    .map((value) => Number(value));
+
+  if (clean.length < limit) return null;
+  return Number(clean.slice(-limit).reduce((sum, value) => sum + value, 0).toFixed(2));
+}
+
+function pointDelta(current: any, previous: any) {
+  if (!Number.isFinite(Number(current)) || !Number.isFinite(Number(previous))) return null;
+  return Number((Number(current) - Number(previous)).toFixed(2));
+}
+
 function summarizeFinancialRows(rows: any[]) {
   const sorted = latestRowsByDate(rows);
   if (!sorted.length) return {};
 
-  const latestDate = sorted[sorted.length - 1]?.date || "";
+  const snapshots = buildFinancialQuarterSnapshots(sorted);
+  const latest = snapshots[snapshots.length - 1] || {};
+  const previous = snapshots[snapshots.length - 2] || {};
+  const latestDate = latest?.date || sorted[sorted.length - 1]?.date || "";
 
-  const eps = getLatestFinancialValue(sorted, "EPS");
+  const eps = latest.eps ?? getLatestFinancialValue(sorted, "EPS");
   const epsPrevYear = getSameQuarterPreviousYearFinancialValue(sorted, "EPS");
-  const grossProfit = getLatestFinancialValue(sorted, "GrossProfit");
-  const operatingIncome = pickFirstFinancialValue(sorted, [
-    "OperatingIncome",
-    "OperatingProfit",
-    "NetOperatingIncome",
-  ]);
-  const revenue = pickFirstFinancialValue(sorted, [
-    "Revenue",
-    "OperatingRevenue",
-    "TotalRevenue",
-    "Income",
-  ]);
-  const incomeAfterTaxes = getLatestFinancialValue(sorted, "IncomeAfterTaxes");
+  const epsSeries = snapshots.map((snapshot) => snapshot.eps);
+  const incomeSeries = snapshots.map((snapshot) => snapshot.incomeAfterTaxes);
+  const epsTtm = sumRecentFinite(epsSeries, 4);
+  const previousEpsTtm = epsSeries.filter((value) => value !== null && value !== undefined).length >= 8
+    ? Number(epsSeries.filter((value) => value !== null && value !== undefined).slice(-8, -4).reduce((sum, value) => sum + Number(value), 0).toFixed(2))
+    : null;
+  const incomeAfterTaxesTtm = sumRecentFinite(incomeSeries, 4);
 
   return {
     financialUpdatedAt: latestDate,
+    financialQuarterCount: snapshots.length,
     eps,
+    epsTtm,
     epsGrowthYoY: calcPctChange(eps, epsPrevYear),
-    grossProfit,
-    operatingIncome,
-    financialRevenue: revenue,
-    incomeAfterTaxes,
-    grossMargin: revenue ? Number(((Number(grossProfit || 0) / Number(revenue)) * 100).toFixed(2)) : null,
-    operatingMargin: revenue ? Number(((Number(operatingIncome || 0) / Number(revenue)) * 100).toFixed(2)) : null,
+    epsTtmGrowthYoY: calcPctChange(epsTtm, previousEpsTtm),
+    grossProfit: latest.grossProfit ?? getLatestFinancialValue(sorted, "GrossProfit"),
+    operatingIncome: latest.operatingIncome ?? pickFirstFinancialValue(sorted, [
+      "OperatingIncome",
+      "OperatingProfit",
+      "NetOperatingIncome",
+    ]),
+    financialRevenue: latest.financialRevenue ?? pickFirstFinancialValue(sorted, [
+      "Revenue",
+      "OperatingRevenue",
+      "TotalRevenue",
+      "Income",
+    ]),
+    incomeAfterTaxes: latest.incomeAfterTaxes ?? getLatestFinancialValue(sorted, "IncomeAfterTaxes"),
+    incomeAfterTaxesTtm,
+    grossMargin: latest.grossMargin ?? null,
+    grossMarginQoQ: pointDelta(latest.grossMargin, previous.grossMargin),
+    operatingMargin: latest.operatingMargin ?? null,
+    operatingMarginQoQ: pointDelta(latest.operatingMargin, previous.operatingMargin),
+    netMargin: latest.netMargin ?? null,
+    netMarginQoQ: pointDelta(latest.netMargin, previous.netMargin),
   };
 }
 
@@ -407,7 +788,7 @@ function summarizeBalanceRows(rows: any[]) {
 async function buildStock(symbol: string, token: string) {
   const endDate = yyyyMmDd(new Date());
 
-  const startPrice = daysAgo(180);
+  const startPrice = daysAgo(300);
   const startPer = daysAgo(180);
   const startChip = daysAgo(45);
   const startMargin = daysAgo(45);
@@ -472,6 +853,7 @@ async function buildStock(symbol: string, token: string) {
     .map((row: any) => ({
       date: String(row.date || ""),
       stock_id: String(row.stock_id || symbol),
+      open: toNumber(row.open, toNumber(row.close)),
       close: toNumber(row.close),
       max: toNumber(row.max, toNumber(row.close)),
       min: toNumber(row.min, toNumber(row.close)),
@@ -484,6 +866,19 @@ async function buildStock(symbol: string, token: string) {
   const previousPrice = priceSorted[priceSorted.length - 2] || latestPrice;
   const last20 = priceSorted.slice(-20);
   const closes = priceSorted.map((row) => row.close);
+  const technicalIndicators = {
+    ...calcMacd(closes),
+    ...calcKd(priceSorted),
+    ...calcAtr(priceSorted),
+  };
+  const priceRowCount = priceSorted.length;
+  const technicalWarmupStatus = {
+    priceRowCount,
+    macdReady: priceRowCount >= 100,
+    kdReady: priceRowCount >= 40,
+    atrReady: priceRowCount >= 100,
+    recommendedCalendarDays: 300,
+  };
 
   const dailyClose = latestPrice?.close ?? null;
   const close20Ago =
@@ -499,6 +894,13 @@ async function buildStock(symbol: string, token: string) {
   const revenue = summarizeRevenueRows(revenueRows);
   const financial = summarizeFinancialRows(financialRows);
   const balance = summarizeBalanceRows(balanceRows);
+  const roeTtm =
+    Number.isFinite(Number(financial.incomeAfterTaxesTtm)) &&
+    Number(financial.incomeAfterTaxesTtm) !== 0 &&
+    Number.isFinite(Number(balance.equity)) &&
+    Number(balance.equity) !== 0
+      ? Number(((Number(financial.incomeAfterTaxesTtm) / Number(balance.equity)) * 100).toFixed(2))
+      : null;
 
   const fieldErrors = {
     TaiwanStockPrice: priceResult.error,
@@ -516,6 +918,9 @@ async function buildStock(symbol: string, token: string) {
 
     // Daily 技術 / 歷史序列欄位。不回傳 price，避免覆蓋 GoogleFinance 較新行情。
     dailyClose,
+    dailyOpen: latestPrice?.open ?? null,
+    dailyHigh: latestPrice?.max ?? null,
+    dailyLow: latestPrice?.min ?? null,
     dailyPrevClose: previousPrice?.close ?? null,
     dailyVolume: latestPrice?.Trading_Volume ?? null,
     high20: last20.length ? Math.max(...last20.map((row) => row.max)) : null,
@@ -533,6 +938,36 @@ async function buildStock(symbol: string, token: string) {
       dailyClose && close60Ago
         ? Number((((dailyClose - close60Ago) / close60Ago) * 100).toFixed(1))
         : null,
+    priceRowCount,
+    technicalWarmupStatus,
+
+    // App/API 層技術指標：由 FinMind 日 K OHLCV 計算，不放 Google Sheet 運算。
+    macd: technicalIndicators.macd,
+    macdSignal: technicalIndicators.macdSignal,
+    macdHist: technicalIndicators.macdHist,
+    macdHistPrev1: technicalIndicators.macdHistPrev1,
+    macdHistPrev3: technicalIndicators.macdHistPrev3,
+    macdHistDelta3: technicalIndicators.macdHistDelta3,
+    macdHistTrend3: technicalIndicators.macdHistTrend3,
+    macdState: technicalIndicators.macdState,
+    macdWarmupReady: technicalIndicators.macdWarmupReady,
+    k9: technicalIndicators.k9,
+    d9: technicalIndicators.d9,
+    j9: technicalIndicators.j9,
+    k9Prev1: technicalIndicators.k9Prev1,
+    d9Prev1: technicalIndicators.d9Prev1,
+    kdDiff: technicalIndicators.kdDiff,
+    kdDiffPrev1: technicalIndicators.kdDiffPrev1,
+    kdDiffTrend3: technicalIndicators.kdDiffTrend3,
+    kdCross: technicalIndicators.kdCross,
+    kdState: technicalIndicators.kdState,
+    kdWarmupReady: technicalIndicators.kdWarmupReady,
+    atr14: technicalIndicators.atr14,
+    atrPct: technicalIndicators.atrPct,
+    atrPctAvg20: technicalIndicators.atrPctAvg20,
+    atrPctVsAvg20: technicalIndicators.atrPctVsAvg20,
+    volatilityState: technicalIndicators.volatilityState,
+    atrWarmupReady: technicalIndicators.atrWarmupReady,
 
     // TaiwanStockPER：只作估值比對來源，不覆蓋 Google/TWSE 主欄位。
     per: toOptionalNumber(perLatest.PER || perLatest.per || perLatest.PEratio),
@@ -552,9 +987,11 @@ async function buildStock(symbol: string, token: string) {
     ...revenue,
     ...financial,
     ...balance,
+    roeTtm,
+    roe: roeTtm,
 
     updatedAt: latestPrice?.date || endDate,
-    sourceNote: "FinMind enriched: Price/PER/Institutional/Margin/Revenue/Financial/Balance",
+    sourceNote: "FinMind enriched: Price/PER/Institutional/Margin/Revenue/Financial/Balance/ROE+TTM + App technical indicators",
     datasetStatus: {
       TaiwanStockPrice: priceResult.ok,
       TaiwanStockPER: perResult.ok,
@@ -642,7 +1079,7 @@ export async function GET(request: Request) {
     fetchedAt: new Date().toISOString(),
     requestCostHint: {
       datasetsPerSymbol: 7,
-      note: "This route intentionally enriches FinMind fields. For 10 symbols it may use about 70 FinMind requests per manual refresh.",
+      note: "This route intentionally enriches FinMind fields. MACD/KD/ATR are calculated from TaiwanStockPrice locally with 300 calendar-day warm-up and add no extra FinMind request. For 10 symbols it may use about 70 FinMind requests per manual refresh.",
     },
   });
 }
