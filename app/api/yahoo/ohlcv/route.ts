@@ -1,7 +1,24 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02_NONREALTIME_AND_GOOGLE_50_LIMIT";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 export const revalidate = 0;
 
 const YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart";
@@ -449,7 +466,7 @@ async function fetchYahoo(symbol: string, range: string, interval: string) {
   };
 }
 
-export async function GET(request: Request) {
+async function uncachedGET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbols = parseSymbols(searchParams.get("symbols"));
   const range = searchParams.get("range") || "1y";
@@ -482,3 +499,54 @@ export async function GET(request: Request) {
     },
   });
 }
+
+
+export async function GET(request: Request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheKey = buildRouteCacheKey("yahoo_ohlcv", request.url);
+
+  try {
+    const cached = await getOrFetchScheduledDailyCached({
+      key: cacheKey,
+      force,
+      meta: { route: "/api/yahoo/ohlcv", policy: "Yahoo OHLCV scheduled cache" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "scheduled_daily",
+          schedule: "08:30 / 14:10 / 15:30 / 18:00 / 22:00 Asia/Taipei",
+          force,
+          route: "/api/yahoo/ohlcv",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/yahoo/ohlcv",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "scheduled_daily", force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+

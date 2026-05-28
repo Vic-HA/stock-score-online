@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getOrFetchCached, isForceRefresh, normalizeCacheKeyPart, parseTtlMs } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +59,29 @@ type EtfListItem = {
   bp: string;
 };
 
+type MarketIndexItem = {
+  symbol: string;
+  name: string;
+  price: number | null;
+  prevClose: number | null;
+  change: number | null;
+  changePct: number | null;
+  tradetime: string;
+  updatedAt: string;
+  rawDate: string;
+  rawTime: string;
+  tlongMs: number | null;
+  quoteAgeSec: number | null;
+  exchange: string;
+  channel: string;
+  raw: TwseMisRaw;
+};
+
 const TWSE_MIS_BASE = "https://mis.twse.com.tw";
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_SYMBOLS = 50;
+const BUILD_VERSION = "TWSE_MIS_CACHE_BUILD_02B_TTL_15S_SYNTAX_FIX";
+const DEFAULT_CACHE_TTL_MS = 15 * 1000;
 
 function json(data: any, status = 200) {
   return NextResponse.json(data, {
@@ -72,7 +93,38 @@ function json(data: any, status = 200) {
   });
 }
 
+function normalizeIndexAlias(value: unknown): string | null {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+
+  const compact = raw.replace(/[^0-9a-z]/g, "");
+
+  if (
+    raw === "t00" ||
+    raw === "tse_t00.tw" ||
+    raw === "tse_t00" ||
+    raw === "taiex" ||
+    raw === "weighted" ||
+    raw === "加權指數" ||
+    compact === "t00" ||
+    compact === "tset00tw" ||
+    compact === "tset00" ||
+    compact === "taiex"
+  ) {
+    return "TAIEX";
+  }
+
+  return null;
+}
+
+function isMarketIndexSymbol(symbol: string): boolean {
+  return symbol === "TAIEX";
+}
+
 function normalizeSymbol(value: unknown): string {
+  const indexAlias = normalizeIndexAlias(value);
+  if (indexAlias) return indexAlias;
+
   const raw = String(value ?? "").trim().toUpperCase();
   if (!raw) return "";
 
@@ -145,6 +197,11 @@ function buildCandidateChannels(symbols: string[]): string[] {
   const channels: string[] = [];
 
   for (const symbol of symbols) {
+    if (isMarketIndexSymbol(symbol)) {
+      channels.push("tse_t00.tw");
+      continue;
+    }
+
     const preferred = inferExchange(symbol);
     const first = `${preferred}_${symbol}.tw`;
     const second = preferred === "tse" ? `otc_${symbol}.tw` : `tse_${symbol}.tw`;
@@ -325,6 +382,61 @@ function buildRawDataMap(rowsBySymbol: Record<string, NormalizedRow>) {
   );
 }
 
+function normalizeMarketIndexRow(raw: TwseMisRaw, fetchedAtMs: number): MarketIndexItem | null {
+  const channel = String(raw?.ch || raw?.["@"] || "").trim().toLowerCase();
+  const rawSymbol = normalizeSymbol(raw?.c || raw?.ch || raw?.["@"]);
+
+  if (rawSymbol !== "TAIEX" && channel !== "tse_t00.tw" && channel !== "t00.tw") return null;
+
+  const rawDate = String(raw?.d || raw?.["^"] || "").trim();
+  const rawTime = String(raw?.t || raw?.["%"] || "").trim();
+  const tradetime = makeTradeTime(rawDate, rawTime);
+
+  const price = parseNumber(raw?.z);
+  const prevClose = parseNumber(raw?.y);
+  const change =
+    price !== null && prevClose !== null
+      ? Number((price - prevClose).toFixed(2))
+      : parseNumber(raw?.diff);
+  const changePct =
+    price !== null && prevClose !== null && prevClose > 0
+      ? Number((((price - prevClose) / prevClose) * 100).toFixed(2))
+      : null;
+
+  const tlongMs = parseNumber(raw?.tlong);
+  const quoteAgeSec =
+    tlongMs !== null && tlongMs > 0
+      ? Math.max(0, Math.round((fetchedAtMs - tlongMs) / 1000))
+      : null;
+
+  return {
+    symbol: "TAIEX",
+    name: String(raw?.n || raw?.nf || "加權指數").trim() || "加權指數",
+    price,
+    prevClose,
+    change,
+    changePct,
+    tradetime,
+    updatedAt: tradetime,
+    rawDate,
+    rawTime,
+    tlongMs,
+    quoteAgeSec,
+    exchange: String(raw?.ex || "tse").trim() || "tse",
+    channel: String(raw?.ch || raw?.["@"] || "tse_t00.tw").trim() || "tse_t00.tw",
+    raw,
+  };
+}
+
+function buildMarketIndex(rawRows: TwseMisRaw[], fetchedAtMs: number): MarketIndexItem | null {
+  for (const row of rawRows) {
+    const normalized = normalizeMarketIndexRow(row, fetchedAtMs);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 async function fetchTwseMisQuotes(symbols: string[], timeoutMs: number, fetchedAtMs: number) {
   if (!symbols.length) {
     return {
@@ -347,17 +459,23 @@ async function fetchTwseMisQuotes(symbols: string[], timeoutMs: number, fetchedA
 
   const upstream = await fetchJson(upstreamUrl, timeoutMs);
   const rawRows = Array.isArray(upstream?.msgArray) ? upstream.msgArray : [];
+  const marketIndex = buildMarketIndex(rawRows, fetchedAtMs);
+  const quoteSymbols = symbols.filter((symbol) => !isMarketIndexSymbol(symbol));
   const normalizedRows = rawRows.map((row: TwseMisRaw) => normalizeMisRow(row, fetchedAtMs)).filter(Boolean) as NormalizedRow[];
-  const bestRows = chooseBestRows(normalizedRows, symbols);
-  const rows = symbols.map((symbol) => bestRows[symbol]).filter(Boolean) as NormalizedRow[];
+  const bestRows = chooseBestRows(normalizedRows, quoteSymbols);
+  const rows = quoteSymbols.map((symbol) => bestRows[symbol]).filter(Boolean) as NormalizedRow[];
   const rawDataMap = buildRawDataMap(bestRows);
-  const missingSymbols = symbols.filter((symbol) => !bestRows[symbol]);
+  const missingSymbols = [
+    ...quoteSymbols.filter((symbol) => !bestRows[symbol]),
+    ...symbols.filter((symbol) => isMarketIndexSymbol(symbol) && !marketIndex),
+  ];
 
   return {
     requestedSymbols: symbols,
     rows,
     rawDataMap,
     missingSymbols,
+    marketIndex,
     upstream,
     upstreamUrl,
   };
@@ -410,41 +528,78 @@ export async function GET(request: Request) {
   );
 
   try {
-    const quoteResult = await fetchTwseMisQuotes(symbols, timeoutMs, startedAt);
-    const etfListResult = includeEtfList ? await fetchEtfList(timeoutMs) : null;
+    const force = isForceRefresh(searchParams);
+    const cacheTtlMs = parseTtlMs(searchParams, DEFAULT_CACHE_TTL_MS);
+    const cacheKey = [
+      "twse_mis",
+      normalizeCacheKeyPart(symbols.join(",")),
+      includeEtfList ? "etfList=1" : "etfList=0",
+    ].join(":");
+
+    const cached = await getOrFetchCached({
+      key: cacheKey,
+      ttlMs: cacheTtlMs,
+      force,
+      meta: { symbols, includeEtfList },
+      fetcher: async () => {
+        const fetchedAtMs = Date.now();
+        const quoteResult = await fetchTwseMisQuotes(symbols, timeoutMs, fetchedAtMs);
+        const etfListResult = includeEtfList ? await fetchEtfList(timeoutMs) : null;
+
+        return {
+          ok: true,
+          source: "twse_mis",
+          route: "/api/twse/mis",
+          version: BUILD_VERSION,
+          refreshHintSec: 5,
+          note:
+            "TWSE MIS 盤中近即時價量來源。股票可用 last price / volume；ETF 多數 z 為 '-'，因此提供 displayPrice/quoteMidPrice 作五檔參考價。ETF 另提供 B0 清單、行情與 raw.nu 投信 NAV 連結。支援 t00 / TAIEX 查詢加權指數，回傳 marketIndex 並計算與昨收相比的漲跌與漲跌%。ETF iNAV / 折溢價由 /api/etf/inav 提供，不進短線分數。",
+          requestedSymbols: symbols,
+          count: quoteResult.rows.length,
+          rows: quoteResult.rows.map((row) => ({
+            ...row,
+            raw: undefined,
+            twseMisRaw: row.raw,
+          })),
+          rawDataMap: quoteResult.rawDataMap,
+          missingSymbols: quoteResult.missingSymbols,
+          marketIndex: quoteResult.marketIndex
+            ? {
+                ...quoteResult.marketIndex,
+                raw: undefined,
+                twseMisRaw: quoteResult.marketIndex.raw,
+              }
+            : null,
+          etfList: etfListResult
+            ? {
+                count: etfListResult.count,
+                etfs: etfListResult.etfs,
+                sourceUrl: etfListResult.url,
+              }
+            : null,
+          upstream: {
+            quoteUrl: quoteResult.upstreamUrl,
+            rtcode: quoteResult.upstream?.rtcode,
+            rtmessage: quoteResult.upstream?.rtmessage,
+            queryTime: quoteResult.upstream?.queryTime,
+            cachedAlive: quoteResult.upstream?.cachedAlive,
+          },
+          elapsedMs: Date.now() - fetchedAtMs,
+          fetchedAt: new Date(fetchedAtMs).toISOString(),
+        };
+      },
+    });
 
     return json({
-      ok: true,
-      source: "twse_mis",
-      route: "/api/twse/mis",
-      refreshHintSec: 5,
-      note:
-        "TWSE MIS 盤中近即時價量來源。股票可用 last price / volume；ETF 多數 z 為 '-'，因此提供 displayPrice/quoteMidPrice 作五檔參考價。ETF 另提供 B0 清單、行情與 raw.nu 投信 NAV 連結。ETF iNAV / 折溢價尚未直接接入，不進短線分數。",
-      requestedSymbols: symbols,
-      count: quoteResult.rows.length,
-      rows: quoteResult.rows.map((row) => ({
-        ...row,
-        raw: undefined,
-        twseMisRaw: row.raw,
-      })),
-      rawDataMap: quoteResult.rawDataMap,
-      missingSymbols: quoteResult.missingSymbols,
-      etfList: etfListResult
-        ? {
-            count: etfListResult.count,
-            etfs: etfListResult.etfs,
-            sourceUrl: etfListResult.url,
-          }
-        : null,
-      upstream: {
-        quoteUrl: quoteResult.upstreamUrl,
-        rtcode: quoteResult.upstream?.rtcode,
-        rtmessage: quoteResult.upstream?.rtmessage,
-        queryTime: quoteResult.upstream?.queryTime,
-        cachedAlive: quoteResult.upstream?.cachedAlive,
+      ...cached.value,
+      cache: cached.cache,
+      cachePolicy: {
+        realtime: true,
+        ttlMs: cacheTtlMs,
+        force,
+        sourceUpdateTimeField: "rows[].tradetime / marketIndex.tradetime / fetchedAt",
       },
       elapsedMs: Date.now() - startedAt,
-      fetchedAt: new Date(startedAt).toISOString(),
     });
   } catch (error: any) {
     return json(
@@ -452,6 +607,7 @@ export async function GET(request: Request) {
         ok: false,
         source: "twse_mis",
         route: "/api/twse/mis",
+        version: BUILD_VERSION,
         requestedSymbols: symbols,
         error: error?.message || String(error),
         elapsedMs: Date.now() - startedAt,

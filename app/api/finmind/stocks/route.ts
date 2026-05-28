@@ -1,7 +1,65 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02D_FINMIND_STALE_IF_ERROR";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+const globalFinMindStocksStale = globalThis as typeof globalThis & {
+  __finmindStocksLastGoodCache?: Map<string, any>;
+};
+
+const finmindStocksLastGoodStore =
+  globalFinMindStocksStale.__finmindStocksLastGoodCache || new Map<string, any>();
+
+globalFinMindStocksStale.__finmindStocksLastGoodCache = finmindStocksLastGoodStore;
+
+function makeStaleCacheMeta(key: string, entry: any, ttlMs: number, upstreamError: any) {
+  const now = Date.now();
+  const createdAt = Number(entry?.createdAt || now);
+  const ageSec = Math.max(0, Math.round((now - createdAt) / 1000));
+
+  return {
+    hit: true,
+    stale: true,
+    fallback: "last_good_on_error",
+    key,
+    ageSec,
+    ttlSec: Math.max(0, Math.round(Number(ttlMs || 0) / 1000)),
+    expiresInSec: 0,
+    createdAt: new Date(createdAt).toISOString(),
+    expiresAt: new Date(createdAt + Number(ttlMs || 0)).toISOString(),
+    policy: "ttl_stale_if_error",
+    upstreamError: upstreamError?.message || String(upstreamError || ""),
+  };
+}
+
+function saveFinMindStocksLastGood(key: string, payload: any, quality: any) {
+  finmindStocksLastGoodStore.set(key, {
+    payload,
+    quality,
+    createdAt: Date.now(),
+  });
+}
+
+function getFinMindStocksLastGood(key: string) {
+  return finmindStocksLastGoodStore.get(key) || null;
+}
+
+
 
 const FINMIND_API_URL = "https://api.finmindtrade.com/api/v4/data";
 const DEFAULT_SYMBOLS = ["2330", "0050"];
@@ -23,7 +81,7 @@ function parseSymbols(input: string | null) {
     .split(",")
     .map((x) => x.trim().toUpperCase())
     .filter(Boolean)
-    .slice(0, 10);
+    .slice(0, 50);
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -1014,7 +1072,7 @@ async function buildStock(symbol: string, token: string) {
   };
 }
 
-export async function GET(request: Request) {
+async function uncachedGET(request: Request) {
   const { token, tokenSource } = getRequestToken(request);
 
   if (!token) {
@@ -1024,7 +1082,7 @@ export async function GET(request: Request) {
         message:
           "Missing FinMind token. Set FINMIND_TOKEN in .env.local or send X-FinMind-Token header.",
       },
-      { status: 500 }
+      { status: error?.status && error.status >= 400 ? error.status : 502 }
     );
   }
 
@@ -1079,7 +1137,200 @@ export async function GET(request: Request) {
     fetchedAt: new Date().toISOString(),
     requestCostHint: {
       datasetsPerSymbol: 7,
-      note: "This route intentionally enriches FinMind fields. MACD/KD/ATR are calculated from TaiwanStockPrice locally with 300 calendar-day warm-up and add no extra FinMind request. For 10 symbols it may use about 70 FinMind requests per manual refresh.",
+      note: "This route intentionally enriches FinMind fields. MACD/KD/ATR are calculated from TaiwanStockPrice locally with 300 calendar-day warm-up and add no extra FinMind request. For 50 symbols it may use about 350 FinMind requests per manual refresh. With FinMind Market + Derivatives hourly cache, a 50-symbol list is about 369 requests/hour, below a 600 requests/hour free-token budget.",
     },
   });
 }
+
+
+function getFinMindStocksCacheQuality(payload: any) {
+  const stocks = Array.isArray(payload?.stocks) ? payload.stocks : [];
+  const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+  const requestedSymbols = Array.isArray(payload?.requestedSymbols) ? payload.requestedSymbols : [];
+
+  const usableStocks = stocks.filter((stock: any) => {
+    const priceRowCount = Number(stock?.priceRowCount ?? 0);
+    const dailyClose = Number(stock?.dailyClose);
+    const dailyVolume = Number(stock?.dailyVolume);
+    const ma5 = Number(stock?.ma5);
+    const ma20 = Number(stock?.ma20);
+    const avgVolume20 = Number(stock?.avgVolume20);
+
+    return (
+      priceRowCount > 0 ||
+      dailyClose > 0 ||
+      dailyVolume > 0 ||
+      ma5 > 0 ||
+      ma20 > 0 ||
+      avgVolume20 > 0
+    );
+  });
+
+  const invalidStocks = stocks.filter((stock: any) => {
+    const priceRowCount = Number(stock?.priceRowCount ?? 0);
+    const dailyClose = Number(stock?.dailyClose);
+    const ma5 = Number(stock?.ma5);
+    const ma20 = Number(stock?.ma20);
+
+    return priceRowCount <= 0 && !dailyClose && !ma5 && !ma20;
+  });
+
+  const requestedCount = requestedSymbols.length || stocks.length;
+  const invalidRatio = stocks.length ? invalidStocks.length / stocks.length : 1;
+
+  let reason = "";
+  if (!payload || payload.ok !== true) reason = "payload.ok is not true";
+  else if (!stocks.length) reason = "payload.stocks is empty";
+  else if (!usableStocks.length) reason = "no usable daily price/technical data";
+  else if (requestedCount > 0 && errors.length >= requestedCount) reason = "all requested symbols returned errors";
+  else if (stocks.length >= 2 && invalidRatio >= 0.5) reason = `too many invalid stocks (${invalidStocks.length}/${stocks.length})`;
+
+  return {
+    cacheable: !reason,
+    reason,
+    requestedCount,
+    stockCount: stocks.length,
+    usableCount: usableStocks.length,
+    invalidCount: invalidStocks.length,
+    errorCount: errors.length,
+  };
+}
+
+
+
+export async function GET(request: Request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheTtlMs = parseTtlMs(url.searchParams, 60 * 60 * 1000);
+  const cacheKey = buildRouteCacheKey("finmind_stocks_stale_v02d", request.url);
+
+  try {
+    const cached = await getOrFetchCached({
+      key: cacheKey,
+      ttlMs: cacheTtlMs,
+      force,
+      meta: { route: "/api/finmind/stocks", policy: "FinMind Daily 1h TTL" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        const quality = getFinMindStocksCacheQuality(payload);
+
+        if (!res.ok || !quality.cacheable) {
+          const error = new Error(
+            `FinMind stocks response was not cached: ${quality.reason || `HTTP ${res.status}`}`
+          ) as any;
+          error.status = res.status || 502;
+          error.payload = payload;
+          error.quality = quality;
+          throw error;
+        }
+
+        const guardedPayload = {
+          ...payload,
+          cacheQuality: quality,
+        };
+
+        saveFinMindStocksLastGood(cacheKey, guardedPayload, quality);
+
+        return {
+          payload: guardedPayload,
+          status: res.status,
+        };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "ttl",
+          ttlMs: cacheTtlMs,
+          force,
+          route: "/api/finmind/stocks",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    const lastGood = getFinMindStocksLastGood(cacheKey);
+
+    if (lastGood?.payload) {
+      return NextResponse.json(
+        {
+          ...lastGood.payload,
+          ok: true,
+          stale: true,
+          staleReason: "FinMind upstream response failed quality checks; served last good payload instead of caching bad data.",
+          staleGeneratedAt: new Date(lastGood.createdAt).toISOString(),
+          cache: makeStaleCacheMeta(cacheKey, lastGood, cacheTtlMs, error),
+          cachePolicy: {
+            build: CACHE_BUILD_VERSION,
+            kind: "ttl_stale_if_error",
+            ttlMs: cacheTtlMs,
+            force,
+            route: "/api/finmind/stocks",
+            staleIfError: true,
+          },
+          cacheQuality: lastGood.quality || lastGood.payload.cacheQuality || null,
+          upstreamError: {
+            message: error?.message || String(error),
+            quality: error?.quality || null,
+            status: error?.status || null,
+            summary: error?.payload
+              ? {
+                  ok: error.payload?.ok,
+                  source: error.payload?.source,
+                  requestedSymbols: error.payload?.requestedSymbols,
+                  count: error.payload?.count,
+                  errorCount: Array.isArray(error.payload?.errors) ? error.payload.errors.length : null,
+                  fetchedAt: error.payload?.fetchedAt,
+                }
+              : null,
+          },
+          wrapperStartedAt,
+          wrapperFinishedAt: new Date().toISOString(),
+          note: "Served stale last-good FinMind data. The failed upstream payload was not cached.",
+        },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/finmind/stocks",
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "ttl_stale_if_error",
+          ttlMs: cacheTtlMs,
+          force,
+          route: "/api/finmind/stocks",
+          staleIfError: true,
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+        cacheQuality: error?.quality || null,
+        upstreamStatus: error?.status || null,
+        upstreamSummary: error?.payload
+          ? {
+              ok: error.payload?.ok,
+              source: error.payload?.source,
+              requestedSymbols: error.payload?.requestedSymbols,
+              count: error.payload?.count,
+              errorCount: Array.isArray(error.payload?.errors) ? error.payload.errors.length : null,
+              fetchedAt: error.payload?.fetchedAt,
+            }
+          : null,
+        note: "This bad FinMind response was intentionally not cached, and no last-good payload is available yet.",
+      },
+      { status: error?.status && error.status >= 400 ? error.status : 502 }
+    );
+  }
+}
+

@@ -1,5 +1,23 @@
 // @ts-nocheck
 "use client";
+// BUILD_28V_MARKET_INDEX_LAST_GOOD_AND_APP_POLISH
+// BUILD_28U_OVERVIEW_ALWAYS_SHOW_MARKET_INDEX
+// BUILD_28T_SOURCE_INPUT_ORDER_FIX
+// BUILD_28S_SOURCE_ROLE_OVERVIEW_UNIFIED
+// BUILD_28R_SOURCE_CARD_GROUP_SORT
+// BUILD_28Q_STARTUP_WARMUP_APPLY_VALIDATION
+// BUILD_28P_CONSOLIDATED_SOURCE_RULES
+// BUILD_28N_RECONNECT_FINMIND_SMART_REFRESH_NO_AUTO
+// BUILD_28M_DISABLE_FINMIND_SMART_REFRESH
+// BUILD_28L_REMOVE_FINMIND_MINUTE_ASPECT_ROW
+// BUILD_28K_REMOVE_FINMIND_MINUTE_POLICY
+// BUILD_28J_STARTUP_CACHE_WARMUP_NON_FINMIND
+// BUILD_28I_MAX_50_ASSETS_AND_CACHE2_UI
+// BUILD_28H_SOURCE_RUNTIME_LABEL_FIX
+// BUILD_28G_SOURCE_SORT_AND_STAGE2_PREP
+// BUILD_28F_SOURCE_RUNTIME_CACHE_STATUS
+
+// BUILD_28C_FRONTEND_PRIVATE_OVERVIEW_OFFICIAL_ETF_INAV: friend-facing overview + official ETF iNAV wiring.
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -71,6 +89,8 @@ function Icon({ name, className = "h-4 w-4" }) {
 
 const DEFAULT_DATA_MODE = "mock";
 const STOCKS_STORAGE_KEY = "stock_score_online_assets_v2";
+const MARKET_INDEX_STORAGE_KEY = "stock_score_online_market_index_v1";
+const MAX_TRACKED_ASSETS = 50;
 
 function loadPersistedStocks() {
   if (typeof window === "undefined") return null;
@@ -79,7 +99,7 @@ function loadPersistedStocks() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || !parsed.length) return null;
-    return parsed.filter((stock) => stock && stock.symbol).map((stock) => ({
+    return parsed.filter((stock) => stock && stock.symbol).slice(0, MAX_TRACKED_ASSETS).map((stock) => ({
       ...createAssetTemplate({
         symbol: stock.symbol,
         name: stock.name || stock.symbol,
@@ -93,6 +113,48 @@ function loadPersistedStocks() {
     return null;
   }
 }
+function loadPersistedMarketIndex() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(MARKET_INDEX_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const price = Number(parsed?.price);
+    if (!Number.isFinite(price)) return null;
+    return {
+      ...parsed,
+      price,
+      prevClose: Number.isFinite(Number(parsed?.prevClose)) ? Number(parsed.prevClose) : null,
+      change: Number.isFinite(Number(parsed?.change)) ? Number(parsed.change) : null,
+      changePct: Number.isFinite(Number(parsed?.changePct)) ? Number(parsed.changePct) : null,
+      stale: true,
+      staleReason: "last_known_from_local_storage",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistMarketIndex(index) {
+  if (typeof window === "undefined") return;
+  try {
+    const price = Number(index?.price);
+    if (!Number.isFinite(price)) return;
+    window.localStorage.setItem(MARKET_INDEX_STORAGE_KEY, JSON.stringify({
+      label: index.label || "加權指數",
+      price,
+      prevClose: Number.isFinite(Number(index?.prevClose)) ? Number(index.prevClose) : null,
+      change: Number.isFinite(Number(index?.change)) ? Number(index.change) : null,
+      changePct: Number.isFinite(Number(index?.changePct)) ? Number(index.changePct) : null,
+      time: index.time || "",
+      updatedAt: index.updatedAt || new Date().toISOString(),
+      source: index.source || "market_index",
+    }));
+  } catch {
+    // ignore localStorage write failures
+  }
+}
+
 
 const DEFAULT_GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTwI6HZIQcKRt3H9MCDW4kRynUlkMtR1KnzUYpGpXMhNErX-LrO3ejwbJ7hD9R_BfaOXtCaSo6nhhf_/pub?output=csv";
 const DEFAULT_FINMIND_PROXY_URL = "/api/finmind/stocks";
@@ -102,6 +164,7 @@ const DEFAULT_TWSE_PROXY_URL = ["", "api", "twse", "stocks"].join("/");
 const DEFAULT_TWSE_MIS_PROXY_URL = "/api/twse/mis";
 const DEFAULT_YAHOO_OHLCV_PROXY_URL = "/api/yahoo/ohlcv";
 const DEFAULT_YAHOO_ETF_PROXY_URL = "/api/yahoo/etf";
+const DEFAULT_ETF_INAV_PROXY_URL = "/api/etf/inav";
 const TWSE_STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
 const TWSE_BWIBBU_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL";
 const CORS_PROXY_RAW_URL = "https://api.allorigins.win/raw?url=";
@@ -117,60 +180,60 @@ const SOURCE_REFRESH_POLICY = {
     label: "TWSE",
     timeoutMs: 15000,
     cooldownMs: 60 * 1000,
-    autoRefreshMs: 3 * 60 * 60 * 1000,
-    cacheNote: "官方盤後 / 官方校正資料；自動每 3 小時刷新一次，手動讀取 60 秒內不重抓。欄位：official price / prevClose / volume / PER / PBR / 殖利率。",
+    autoRefreshMs: 0,
+    cacheNote: "官方盤後 / 官方校正資料；固定時段 cache：08:30 / 14:10 / 15:30 / 18:00 / 22:00。其他時間吃 cache；第一次進頁面會啟動預熱並補資料驗證，debug / 進階測試可手動刷新。欄位：official price / prevClose / volume / PER / PBR / 殖利率。",
   },
   twse_mis: {
     label: "TWSE MIS 盤中主價量",
     timeoutMs: 15000,
     cooldownMs: 15 * 1000,
     autoRefreshMs: 15 * 1000,
-    cacheNote: "盤中 08:30～14:00 每 15 秒批次查詢；tradetime 未更新就不重繪。欄位：price / volume / tradetime / displayPrice / navUrl。",
+    cacheNote: "盤中 08:30～14:00 每 15 秒批次查詢；route 端有 15 秒快取。miss 代表本次重抓外部，hit 代表 15 秒內重複呼叫吃快取；tradetime 未更新就不重繪。欄位：price / volume / tradetime / displayPrice / navUrl。",
   },
   finmind_proxy: {
     label: "FinMind",
     timeoutMs: 25000,
-    cooldownMs: 30 * 60 * 1000,
-    autoRefreshMs: 60 * 60 * 1000,
-    cacheNote: "非即時技術資料；保守期自動每 60 分鐘，手動 30 分鐘內不重抓。欄位：ma5 / ma20 / ma60 / rsi14 / high20 / low20 / avgVolume20 / return20d / return60d / MACD / KD / ATR。",
+    cooldownMs: 60 * 60 * 1000,
+    autoRefreshMs: 0,
+    cacheNote: "FinMind Daily 供分數使用；第一次進頁面會啟動預熱，主更新資料與進階手動按鈕也可觸發。route 端保留 1 小時 cache + stale-if-error；頁面不做 interval 自動刷新、不帶 force。欄位：ma5 / ma20 / ma60 / rsi14 / high20 / low20 / avgVolume20 / return20d / return60d / MACD / KD / ATR。",
   },
   finmind_market: {
     label: "FinMind Market",
     timeoutMs: 20000,
-    cooldownMs: 5 * 60 * 1000,
-    autoRefreshMs: 10 * 60 * 1000,
-    cacheNote: "國際市場補資料；抓 Nasdaq / SOX / S&P500 / VIX / 匯率 / 美債 / 原油 / 黃金。Nasdaq / SOX 可作第二來源；VIX 僅作日收盤參考。建議 5～15 分鐘刷新。",
+    cooldownMs: 60 * 60 * 1000,
+    autoRefreshMs: 0,
+    cacheNote: "FinMind Market 供市場風險參考；第一次進頁面會啟動預熱，主更新資料與進階手動按鈕也可觸發。route 端保留 1 小時 cache；頁面不做 interval 自動刷新、不帶 force。Nasdaq / SOX 可作第二來源；VIX 僅作日收盤參考。",
   },
   finmind_derivatives: {
     label: "FinMind Derivatives",
     timeoutMs: 20000,
-    cooldownMs: 15 * 60 * 1000,
-    autoRefreshMs: 30 * 60 * 1000,
-    cacheNote: "衍生性商品補資料；抓台指期、期貨法人、選擇權 Put/Call。建議 15～30 分鐘刷新。",
+    cooldownMs: 60 * 60 * 1000,
+    autoRefreshMs: 0,
+    cacheNote: "FinMind Derivatives 供隔夜 / 衍生性風險參考；第一次進頁面會啟動預熱，主更新資料與進階手動按鈕也可觸發。route 端保留 1 小時 cache；頁面不做 interval 自動刷新、不帶 force。抓台指期、期貨法人、選擇權 Put/Call。",
   },
   yahoo_ohlcv: {
-    label: "外部 OHLCV 抽樣驗證",
+    label: "Yahoo OHLCV 備援驗證",
     timeoutMs: 20000,
     cooldownMs: 5 * 60 * 1000,
     autoRefreshMs: 0,
-    maxSymbols: 10,
-    cacheNote: "手動抽樣驗證來源；只抓 Yahoo raw OHLCV 並用同公式重算技術指標，不覆蓋主資料、不參與分數。",
+    maxSymbols: 50,
+    cacheNote: "Yahoo OHLCV 備援驗證；固定時段 cache：08:30 / 14:10 / 15:30 / 18:00 / 22:00。其他時間吃 cache；第一次進頁面會啟動預熱，debug / 進階測試可手動刷新。只更新驗證層，不覆蓋 TWSE / FinMind 主資料、不參與分數。",
   },
-  yahoo_etf: {
-    label: "Yahoo ETF 輔助資料",
+  official_etf_inav: {
+    label: "ETF 即時估值",
     timeoutMs: 20000,
-    cooldownMs: 5 * 60 * 1000,
+    cooldownMs: 15 * 1000,
     autoRefreshMs: 0,
     maxSymbols: 30,
-    cacheNote: "ETF 輔助資料；抓 Yahoo ETF 溢價 / 折價頁，補折溢價、區間高低與日內漲跌。只作 ETF 小卡與資料驗證，不覆蓋主資料、不參與分數。",
+    cacheNote: "ETF 即時估值資料；跟隨 TWSE MIS 更新後同步刷新，不另開固定 interval。檔數上限只是 route 保護機制，正常清單不需手動調整；僅更新 ETF 小卡與驗證層，不進短線分數。",
   },
-  finmind_minute: {
-    label: "FinMind Minute（未啟用）",
-    timeoutMs: 15000,
-    cooldownMs: 180 * 1000,
+  yahoo_etf: {
+    label: "Yahoo ETF 備援資料",
+    timeoutMs: 20000,
+    cooldownMs: 5 * 60 * 1000,
     autoRefreshMs: 0,
-    maxSymbols: 10,
-    cacheNote: "目前 free level 無權限，已停用自動觸發。",
+    maxSymbols: 50,
+    cacheNote: "Yahoo ETF 備援資料；固定時段 cache：08:30 / 14:10 / 15:30 / 18:00 / 22:00。其他時間吃 cache；第一次進頁面會啟動預熱，debug / 進階測試可手動刷新。只在投信官方 iNAV 缺值或 debug 時參考，不覆蓋官方 iNAV、不參與分數。",
   },
 };
 const DEFAULT_FETCH_TIMEOUT_MS = 8000;
@@ -188,92 +251,121 @@ function getSourceConnectorPlan(config) {
     { name: "TWSE OpenAPI", role: "官方盤後 / 官方校正", status: config.twseProxyUrl ? "可測試" : "需 proxy", fields: "官方 price、prevClose、volume、PER、PBR、殖利率", method: "預設走 /api/twse/stocks proxy；免費免 token，作官方盤後校正與估值基準。盤中不拿 TWSE 硬比 GoogleFinance 即時口徑。" },
     { name: "TWSE MIS", role: "盤中 price / volume 主來源候選", status: "可手動測試", fields: "price / displayPrice / quoteMidPrice / prevClose / volume / tradetime / quoteAgeSec / navUrl", method: "前端手動讀取 Next.js TWSE MIS route；更新主畫面 price / volume，GoogleFinance 保留輔助比對；短線分數公式暫不改。" },
     { name: "Yahoo OHLCV", role: "外部 raw OHLCV 抽樣驗證", status: config.yahooOhlcvProxyUrl ? "可驗證" : "待接 proxy", fields: "Open / High / Low / Close、MACD / KD / ATR 同公式重算結果", method: "呼叫 /api/yahoo/ohlcv；只作外部 raw OHLCV 抽樣與技術指標同公式重算驗證，不覆蓋 FinMind 主技術資料、不參與分數。日期不同時只顯示外部值並標示不比對。" },
-    { name: "Yahoo ETF", role: "ETF 折溢價輔助資料", status: config.yahooEtfProxyUrl ? "可測試" : "待接 proxy", fields: "ETF 市價、漲跌、漲跌幅、區間高低、區間差、折溢價%", method: "呼叫 /api/yahoo/etf；只補 ETF 小卡與驗證表輔助欄位，不覆蓋 Google / FinMind / TWSE 主資料、不參與股票或 ETF 短線分數；若 parser 沒匹配到標的，維持缺值。" },
+    { name: "ETF 即時估值", role: "ETF 折溢價主資料", status: config.etfInavProxyUrl ? "可測試" : "待接 proxy", fields: "即時估值、市價、折溢價、前日淨值/市價", method: "呼叫 /api/etf/inav；更新 ETF 小卡與驗證表，不參與短線分數。" },
+    { name: "ETF 備援", role: "ETF 備援輔助資料", status: config.yahooEtfProxyUrl ? "可測試" : "待接 proxy", fields: "ETF 市價、漲跌、漲跌幅、區間高低、區間差、折溢價%", method: "僅作備援輔助；不覆蓋主行情、不參與股票或 ETF 短線分數。" },
   ];
 }
 
 const finmindAspectPlan = [
   {
+    group: "即時區",
+    aspect: "TWSE MIS",
+    datasets: "getStockInfo.jsp",
+    fields: "盤中 / 收盤 price、prevClose、累積成交量 volume、tradetime、quoteAgeSec、navUrl",
+    calcNote: "官方 MIS 近即時行情端點；作盤中 price / volume 主參考與 ETF/TWSE 即時驗證，不覆蓋 FinMind 技術資料。",
+    verifyRef: "GoogleFinance volume / tradetime；TWSE OpenAPI 盤後官方資料。",
+    shortRole: "成交量 sanity check 與盤中主價量參考。",
+    midRole: "通常不使用。",
+    longRole: "不使用。"
+  },
+  {
+    group: "即時區",
+    aspect: "ETF 即時估值",
+    datasets: "/api/etf/inav",
+    fields: "即時估值、市價、折溢價、前日淨值/市價",
+    calcNote: "ETF 專用估值資料；只補 ETF 小卡與驗證表，不覆蓋主行情、不參與短線分數。",
+    verifyRef: "搭配 TWSE MIS 主價量觀察市價一致性；官方 iNAV 優先於 Yahoo ETF 備援。",
+    shortRole: "ETF 折溢價與追價風險觀察。",
+    midRole: "ETF 輔助觀察，不是主評分。",
+    longRole: "不作長線核心依據。"
+  },
+  {
+    group: "即時區",
     aspect: "GoogleFinance",
     datasets: "Google Sheet CSV / GOOGLEFINANCE",
     fields: "price、prevClose、volume、volume10ma、volumeRatio、PER、EPS、high52/low52、roc20、Nasdaq、SOX、VIX、tradetime、updatedAt",
     calcNote: "主畫面較新行情來源；前端每 20 秒重新讀取公開 CSV。行情新鮮度以 tradetime 為準，updatedAt 只作 Sheet/debug 參考；若 Google published CSV 回吐舊快照，App 保留已採用的較新行情。",
-    verifyRef: "TWSE OpenAPI 作官方盤後校正；FinMind Market 可比對 Nasdaq / SOX，但 VIX 只作日收盤參考，不判斷通過/失敗。",
-    shortRole: "短線主行情來源。",
+    verifyRef: "TWSE MIS 作盤中主價量參考；TWSE OpenAPI 作盤後官方校正。",
+    shortRole: "短線輔助行情來源。",
     midRole: "中線行情參考。",
     longRole: "長線不作唯一依據。"
   },
   {
+    group: "非即時資料區",
     aspect: "TWSE OpenAPI",
     datasets: "STOCK_DAY_ALL / BWIBBU_ALL",
     fields: "官方 price、prevClose、volume、PER、PBR、殖利率",
-    calcNote: "免費、免 token、官方盤後 / 官方校正資料；不追逐秒即時，作官方基準。",
+    calcNote: "免費、免 token、官方盤後 / 官方校正資料；固定時段 cache，第一次進頁面會啟動預熱並補驗證表。",
     verifyRef: "GoogleFinance 較新行情可比對價量；FinMind Daily 不覆蓋官方估值。",
     shortRole: "官方校正。",
     midRole: "估值與盤後基準。",
     longRole: "PER / PBR / 殖利率基準。"
   },
   {
-    aspect: "TWSE MIS",
-    datasets: "getStockInfo.jsp",
-    fields: "盤中 / 收盤 price、prevClose、累積成交量 volume、tradetime",
-    calcNote: "官方 MIS 近即時行情端點；目前只補驗證表參考值，不判通過/失敗、不覆蓋 Google 主行情、不進短線分數。明天開盤觀察時間差與量差後再決定是否做正式容忍規則。",
-    verifyRef: "GoogleFinance volume / tradetime；先只顯示參考，不做通過/失敗。",
-    shortRole: "成交量 sanity check 參考，不進分數。",
-    midRole: "通常不使用。",
-    longRole: "不使用。"
-  },
-  {
+    group: "非即時資料區",
     aspect: "FinMind Daily",
-    datasets: "TaiwanStockPrice",
-    fields: "技術、PER/PBR/殖利率比對、三大法人、融資融券、月營收、財報、資產負債",
-    calcNote: "非即時技術補資料；保守期低頻刷新，只補技術欄位，不覆蓋 Google/TWSE 的 price、volume、PER/PBR/殖利率。FinMind TaiwanStockPER 僅進比對層。",
-    verifyRef: "GoogleFinance MA5/MA20 可輔助比對；TWSE 提供官方當日價量基準。",
-    shortRole: "技術分數來源。",
-    midRole: "趨勢資料來源。",
-    longRole: "長線趨勢輔助。"
+    datasets: "TaiwanStockPrice + 技術 / 籌碼 / 基本面 datasets",
+    fields: "MA、RSI、MACD、KD、ATR、20日量均、return20d/60d、三大法人、融資融券、月營收、財報、資產負債",
+    calcNote: "供分數使用；第一次進頁面會啟動預熱。route 端保留 1 小時 cache + stale-if-error，避免 API 異常時把 0 值鎖進 cache。",
+    verifyRef: "TWSE OpenAPI 校正盤後價量與估值；Yahoo OHLCV 僅作外部技術抽樣驗證。",
+    shortRole: "技術分數與籌碼資料來源。",
+    midRole: "趨勢、籌碼與基本面輔助。",
+    longRole: "長線趨勢與品質輔助。"
   },
   {
-    aspect: "FinMind Minute",
-    datasets: "TaiwanStockPriceMinute",
-    fields: "分鐘 close / volume / date-time",
-    calcNote: "分鐘級近即時備援；最多 10 檔，每 180 秒刷新，用於 GoogleFinance 不穩、延遲或抓不到時。",
-    verifyRef: "不取代 Google 主行情；只作備援與盤中輔助。",
-    shortRole: "近即時備援。",
-    midRole: "通常不使用。",
-    longRole: "不使用。"
+    group: "非即時資料區",
+    aspect: "FinMind Market",
+    datasets: "/api/finmind/market",
+    fields: "Nasdaq、SOX、S&P500、VIX、匯率 / 利率 / 商品等市場參考",
+    calcNote: "市場風險補資料；啟動預熱 / 主更新 / 手動觸發，route 端 1 小時 cache，不做 interval 自動刷新。",
+    verifyRef: "GoogleFinance Nasdaq / SOX / VIX 可作同向參考；日收盤與盤中口徑不同時不硬判。",
+    shortRole: "美股與市場風險參考。",
+    midRole: "市場環境輔助。",
+    longRole: "總體背景參考。"
   },
   {
-    aspect: "Yahoo OHLCV",
+    group: "非即時資料區",
+    aspect: "FinMind Derivatives",
+    datasets: "/api/finmind/derivatives",
+    fields: "台指期、期貨法人、選擇權 Put/Call、盤後風險參考",
+    calcNote: "隔夜與衍生性風險補資料；啟動預熱 / 主更新 / 手動觸發，route 端 1 小時 cache，不做 interval 自動刷新。",
+    verifyRef: "有資料才顯示與比對；不覆蓋 TWSE MIS / Google 主行情。",
+    shortRole: "隔夜風險與期權風險參考。",
+    midRole: "市場風險輔助。",
+    longRole: "通常不使用。"
+  },
+  {
+    group: "救援區",
+    aspect: "Yahoo OHLCV 備援驗證",
     datasets: "/api/yahoo/ohlcv",
     fields: "Open / High / Low / Close、MACD / KD / ATR 同公式重算結果",
-    calcNote: "外部 raw OHLCV 抽樣驗證；用 Yahoo 原始日資料重算技術指標，只更新驗證層，不覆蓋 FinMind 主技術資料、不參與分數。",
+    calcNote: "外部 raw OHLCV 抽樣驗證；固定時段 cache，只更新驗證層，不覆蓋 FinMind 主技術資料、不參與分數。",
     verifyRef: "與 FinMind 最新共同交易日對齊；日期不同時顯示外部值但標記不比對。",
     shortRole: "技術驗證，不進短線分數。",
     midRole: "可作中線技術抽樣驗證。",
     longRole: "通常不使用。"
   },
   {
-    aspect: "Yahoo ETF",
+    group: "救援區",
+    aspect: "Yahoo ETF 備援資料",
     datasets: "/api/yahoo/etf",
     fields: "ETF 市價、漲跌、漲跌幅、區間高低、區間差、折溢價%",
-    calcNote: "ETF 專用輔助資料；只補 ETF 小卡與驗證表輔助欄位，不覆蓋 Google / FinMind / TWSE 主資料、不作官方驗證通過、不參與分數。",
-    verifyRef: "若 Yahoo ETF ranking parser 未匹配到標的，欄位維持缺值；可搭配 Yahoo OHLCV 做 ETF 技術驗證。",
-    shortRole: "ETF 追價 / 折價觀察輔助。",
-    midRole: "ETF 輔助觀察，不是主評分。",
+    calcNote: "ETF 備援輔助資料；固定時段 cache，只在投信官方 iNAV 缺值或 debug 時參考，不覆蓋官方 iNAV、不參與分數。",
+    verifyRef: "若備援 parser 未匹配到標的，欄位維持缺值。",
+    shortRole: "備援觀察。",
+    midRole: "備援觀察。",
     longRole: "不作長線核心依據。"
   },
-  {
-    aspect: "暫不使用 / 後續",
-    datasets: "法人、融資、月營收、財報三表、TAIFEX",
-    fields: "foreign3d、trust3d、dealer3d、marginChange、revenue、EPS 成長、TAIFEX",
-    calcNote: "這些欄位暫不讓 FinMind 高頻觸發；之後確認免費官方來源或必要性後再接。",
-    verifyRef: "優先找 TWSE / TPEx / MOPS / TAIFEX 官方免費來源。",
-    shortRole: "暫不計分。",
-    midRole: "後續擴充。",
-    longRole: "後續擴充。"
-  },
 ];
+
+const sourceRoleOverviewGroups = [
+  { title: "即時區", description: "盤中/即時參考：行情、ETF 即時估值與 Google 輔助行情。", tone: "bg-emerald-50 text-emerald-800 border-emerald-100" },
+  { title: "非即時資料區", description: "啟動預熱 / 主更新 / 固定時段 cache：官方盤後校正、技術分數、籌碼、市場與風險補資料。", tone: "bg-sky-50 text-sky-800 border-sky-100" },
+  { title: "救援區", description: "備援與抽樣驗證：不覆蓋主資料、不參與短線分數。", tone: "bg-amber-50 text-amber-800 border-amber-100" },
+].map((group) => ({
+  ...group,
+  items: finmindAspectPlan.filter((item) => item.group === group.title),
+}));
 
 const DEFAULT_WEIGHT_CONFIG = {
   short: {
@@ -923,7 +1015,7 @@ function scoreFundamentalReady(stock) {
 function createAssetTemplate({ symbol, name, type, market }) {
   const normalizedSymbol = normalizeStockSymbol(symbol);
   const normalizedType = type === "ETF" ? "ETF" : "股票";
-  return { symbol: normalizedSymbol, name: String(name || normalizedSymbol || "新標的").trim(), type: normalizedType, market: market || "TWSE", price: 0, prevClose: 0, high20: 0, low20: 0, high52: 0, low52: 0, drawdown52: 0, pricePosition52: 0, roc20: 0, volume: 0, volume10ma: 0, volumeRatio: 0, avgVolume20: 0, ma5: 0, ma20: 0, ma60: 0, rsi14: 50, return20d: 0, return60d: 0, macd: null, macdSignal: null, macdHist: null, macdHistPrev1: null, macdHistPrev3: null, macdHistDelta3: null, macdHistTrend3: "", macdState: "", macdWarmupReady: false, k9: null, d9: null, j9: null, k9Prev1: null, d9Prev1: null, kdDiff: null, kdDiffPrev1: null, kdDiffTrend3: "", kdCross: "", kdState: "", kdWarmupReady: false, atr14: null, atrPct: null, atrPctAvg20: null, atrPctVsAvg20: null, volatilityState: "", atrWarmupReady: false, priceRowCount: 0, technicalWarmupStatus: null, marketcap: 0, beta: 0, datadelay: null, nasdaqReturn1d: 0, soxReturn1d: 0, taifexAfterHoursReturn: 0, vixChange1d: 0, foreign3d: 0, trust3d: 0, dealer3d: 0, foreign20d: 0, trust20d: 0, marginChange5dPct: 0, marginChange20dPct: 0, revenueYoY: 0, revenueMoM: 0, epsGrowthYoY: 0, eps: 0, earningsYield: 0, grossMargin: 0, operatingMargin: 0, grossMarginQoQ: 0, operatingMarginQoQ: 0, netMargin: 0, netMarginQoQ: 0, epsTtm: 0, epsTtmGrowthYoY: 0, incomeAfterTaxesTtm: 0, financialQuarterCount: 0, roe: 0, roeTtm: 0, debtRatio: 0, per: 0, pbr: 0, dividendYield: 0, yield: 0, yahooEtfMarketPrice: null, yahooEtfChange: null, yahooEtfChangePct: null, yahooEtfRangeHigh: null, yahooEtfRangeLow: null, yahooEtfRangeSpread: null, yahooEtfPremiumDiscountPct: null, yahooEtfSourcePage: "", yahooEtfFetchedAt: "" };
+  return { symbol: normalizedSymbol, name: String(name || normalizedSymbol || "新標的").trim(), type: normalizedType, market: market || "TWSE", price: 0, prevClose: 0, high20: 0, low20: 0, high52: 0, low52: 0, drawdown52: 0, pricePosition52: 0, roc20: 0, volume: 0, volume10ma: 0, volumeRatio: 0, avgVolume20: 0, ma5: 0, ma20: 0, ma60: 0, rsi14: 50, return20d: 0, return60d: 0, macd: null, macdSignal: null, macdHist: null, macdHistPrev1: null, macdHistPrev3: null, macdHistDelta3: null, macdHistTrend3: "", macdState: "", macdWarmupReady: false, k9: null, d9: null, j9: null, k9Prev1: null, d9Prev1: null, kdDiff: null, kdDiffPrev1: null, kdDiffTrend3: "", kdCross: "", kdState: "", kdWarmupReady: false, atr14: null, atrPct: null, atrPctAvg20: null, atrPctVsAvg20: null, volatilityState: "", atrWarmupReady: false, priceRowCount: 0, technicalWarmupStatus: null, marketcap: 0, beta: 0, datadelay: null, nasdaqReturn1d: 0, soxReturn1d: 0, taifexAfterHoursReturn: 0, vixChange1d: 0, foreign3d: 0, trust3d: 0, dealer3d: 0, foreign20d: 0, trust20d: 0, marginChange5dPct: 0, marginChange20dPct: 0, revenueYoY: 0, revenueMoM: 0, epsGrowthYoY: 0, eps: 0, earningsYield: 0, grossMargin: 0, operatingMargin: 0, grossMarginQoQ: 0, operatingMarginQoQ: 0, netMargin: 0, netMarginQoQ: 0, epsTtm: 0, epsTtmGrowthYoY: 0, incomeAfterTaxesTtm: 0, financialQuarterCount: 0, roe: 0, roeTtm: 0, debtRatio: 0, per: 0, pbr: 0, dividendYield: 0, yield: 0, yahooEtfMarketPrice: null, yahooEtfChange: null, yahooEtfChangePct: null, yahooEtfRangeHigh: null, yahooEtfRangeLow: null, yahooEtfRangeSpread: null, yahooEtfPremiumDiscountPct: null, yahooEtfSourcePage: "", yahooEtfFetchedAt: "", officialEtfInavEstimatedNav: null, officialEtfInavLatestPrice: null, officialEtfInavReferenceNav: null, officialEtfInavYesterdayPrice: null, officialEtfInavPremiumDiscountPct: null, officialEtfInavNavDate: "", officialEtfInavSourceType: "", officialEtfInavAdapter: "", officialEtfInavUpdatedAt: "" };
 }
 
 function parseNum(value, fallback = 0) {
@@ -1223,7 +1315,7 @@ async function fetchTwseMisRows(symbols = [], timeoutMs = DEFAULT_FETCH_TIMEOUT_
   const rows = Array.isArray(json.rows) ? json.rows : Array.isArray(json.data) ? json.data : [];
   const requested = new Set(normalizedSymbols);
   const seen = new Set();
-  return rows
+  const filteredRows = rows
     .filter(Boolean)
     .filter((row) => requested.has(normalizeStockSymbol(row.symbol || row.stock_id || row.c)))
     .filter((row) => row.price !== null || row.volume !== null || row.tradetime)
@@ -1233,6 +1325,66 @@ async function fetchTwseMisRows(symbols = [], timeoutMs = DEFAULT_FETCH_TIMEOUT_
       seen.add(symbol);
       return true;
     });
+
+  filteredRows.sourceRuntime = buildApiSourceRuntime({
+    source: "twse_mis",
+    json,
+    dataTime: pickTwseMisDataTime(json, filteredRows),
+    count: filteredRows.length,
+    note: json?.marketIndex?.tradetime ? `大盤 ${compactSourceTime(json.marketIndex.tradetime)}` : "",
+  });
+  return filteredRows;
+}
+
+
+async function fetchTwseMarketIndex(timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, proxyUrl = DEFAULT_TWSE_MIS_PROXY_URL) {
+  // BUILD_28E: /api/twse/mis now supports marketIndex via symbols=t00 / TAIEX.
+  // Do not show fake loading text. If marketIndex is unavailable, return null and hide the badge.
+  const baseUrl = proxyUrl || DEFAULT_TWSE_MIS_PROXY_URL;
+
+  try {
+    const sep = baseUrl.includes("?") ? "&" : "?";
+    const url = `${baseUrl}${sep}symbols=t00&_=${Date.now()}`;
+    const res = await fetchWithTimeout(url, {
+      cache: "no-store",
+      headers: { "Accept": "application/json,text/plain,*/*" },
+    }, timeoutMs);
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const index = json?.marketIndex || null;
+    if (!index) return null;
+
+    const price = parseNum(index.price, null);
+    const prevClose = parseNum(index.prevClose, null);
+    const change = parseNum(index.change, null);
+    const changePct = parseNum(index.changePct, null);
+
+    if (!Number.isFinite(Number(price))) return null;
+
+    return {
+      label: "加權指數",
+      price: Number(price),
+      prevClose: Number.isFinite(Number(prevClose)) ? Number(prevClose) : null,
+      change: Number.isFinite(Number(change)) ? Number(change) : null,
+      changePct: Number.isFinite(Number(changePct)) ? Number(changePct) : null,
+      time: index.tradetime || index.updatedAt || "",
+      updatedAt: new Date().toISOString(),
+      stale: false,
+      staleReason: "",
+      source: "market_index",
+      sourceRuntime: buildApiSourceRuntime({
+        source: "twse_mis",
+        json,
+        dataTime: index.tradetime || index.updatedAt || "",
+        count: 1,
+        note: "加權指數",
+      }),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function applyDefinedNumber(target, key, value) {
@@ -1902,6 +2054,112 @@ function formatLastFetch(lastFetchMap, source) {
   return new Date(time).toLocaleTimeString("zh-TW", { hour12: false });
 }
 
+function compactSourceTime(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  // Route wrappers return ISO / UTC timestamps. Convert those to local time first.
+  // Otherwise "2026-05-28T07:08:05Z" would be displayed as "07:08:05"
+  // instead of Taiwan local time "15:08:05".
+  const looksLikeIso = /^\d{4}-\d{2}-\d{2}T/.test(raw) || /Z$/.test(raw);
+  if (looksLikeIso) {
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString("zh-TW", { hour12: false });
+  }
+
+  const m = raw.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
+  if (m) return m[1];
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString("zh-TW", { hour12: false });
+  return raw;
+}
+
+function formatCacheRuntime(cache) {
+  if (!cache) return "";
+  const hit = cache.hit ? "hit" : "miss";
+  const age = Number.isFinite(Number(cache.ageSec)) ? `${cache.ageSec}s` : "-";
+  const ttl = Number.isFinite(Number(cache.ttlSec)) ? `${cache.ttlSec}s` : "-";
+  return `快取 ${hit}｜age ${age} / TTL ${ttl}`;
+}
+
+function buildApiSourceRuntime({ source, json = {}, dataTime = "", count = null, pass = null, note = "" }) {
+  const cacheText = formatCacheRuntime(json?.cache);
+  const sourceDataTime = dataTime || json?.fetchedAt || json?.finishedAt || json?.wrapperFinishedAt || "";
+  const hasPass = pass !== null && pass !== undefined && pass !== "";
+  const hasCount = count !== null && count !== undefined && count !== "";
+  const countText =
+    hasPass && hasCount && Number.isFinite(Number(pass)) && Number.isFinite(Number(count))
+      ? `${pass}/${count} 檔`
+      : hasCount && Number.isFinite(Number(count))
+        ? `${count} 檔`
+        : "";
+
+  return {
+    source,
+    dataTime: sourceDataTime,
+    dataTimeText: compactSourceTime(sourceDataTime),
+    count,
+    pass,
+    note,
+    cache: json?.cache || null,
+    cacheText,
+    cachePolicy: json?.cachePolicy || null,
+    fetchedAt: json?.fetchedAt || json?.finishedAt || json?.wrapperFinishedAt || "",
+    updatedAt: Date.now(),
+    summaryText: [sourceDataTime ? `資料 ${compactSourceTime(sourceDataTime)}` : "", cacheText, countText, note]
+      .filter(Boolean)
+      .join("｜"),
+  };
+}
+
+function formatSourceRuntimeInfo(runtime, fallbackText = "尚未抓取") {
+  if (!runtime) return fallbackText;
+  if (runtime.summaryText) return runtime.summaryText;
+  const parts = [];
+  if (runtime.dataTimeText) parts.push(`資料 ${runtime.dataTimeText}`);
+  if (runtime.cacheText) parts.push(runtime.cacheText);
+  if (Number.isFinite(Number(runtime.count))) parts.push(`${runtime.count} 檔`);
+  return parts.length ? parts.join("｜") : fallbackText;
+}
+
+function formatPolicyAutoRefresh(item) {
+  if (item?.source === "official_etf_inav") return "隨 TWSE MIS 同步";
+  if (item?.source === "twse_proxy" || item?.source === "yahoo_ohlcv" || item?.source === "yahoo_etf") return "啟動預熱 / 固定時段 cache";
+  if (item?.source === "finmind_proxy" || item?.source === "finmind_market" || item?.source === "finmind_derivatives") return "啟動預熱 / 主更新 / 手動";
+  const ms = Number(item?.autoRefreshMs || 0);
+  if (!ms) return "未設定";
+  return `每 ${formatDurationMs(ms)}`;
+}
+
+function formatPolicyMaxSymbols(item) {
+  if (!item?.maxSymbols) return "";
+  return `保護上限：最多 ${item.maxSymbols} 檔`;
+}
+
+function explainCacheRuntime(runtime) {
+  if (!runtime?.cache) return "";
+  return runtime.cache.hit ? "使用快取，未重抓外部" : "本次重抓外部並更新快取";
+}
+
+function pickTwseMisDataTime(json, rows = []) {
+  return (
+    json?.marketIndex?.tradetime ||
+    rows.find((row) => row?.tradetime)?.tradetime ||
+    json?.fetchedAt ||
+    ""
+  );
+}
+
+function pickEtfInavDataTime(json, list = []) {
+  return (
+    list.find((row) => row?.dataTime)?.dataTime ||
+    list.find((row) => row?.navDate)?.navDate ||
+    json?.finishedAt ||
+    json?.wrapperFinishedAt ||
+    ""
+  );
+}
+
 function getFieldSource(stock, key, fallback = "尚未標記來源") {
   return stock?.[`${key}Source`] || stock?.sourceNote || fallback;
 }
@@ -1918,8 +2176,8 @@ function getSourceName(source) {
   if (source === "twse_mis") return "TWSE MIS";
   if (source === "finmind") return "FinMind";
   if (source === "yahoo") return "Yahoo OHLCV";
-  if (source === "yahoo_etf") return "Yahoo ETF";
-  if (source === "pending_finmind_minute") return "待接 FinMind Minute";
+  if (source === "official_etf_inav") return "ETF 即時估值";
+  if (source === "yahoo_etf") return "ETF 備援";
   if (source === "eps_note") return "FinMind 財報 EPS（口徑不同）";
   if (source === "none") return "不比對";
   return "尚無比對來源";
@@ -2246,6 +2504,31 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const yahooEtfRangeSpread = pickCompare(validationMap, symbol, "yahoo_etf", "etfRangeSpread");
   const yahooEtfPremiumDiscountPct = pickCompare(validationMap, symbol, "yahoo_etf", "etfPremiumDiscountPct");
 
+  const officialEtfEstimatedNav = pickCompare(validationMap, symbol, "official_etf_inav", "estimatedNav");
+  const officialEtfLatestPrice = pickCompare(validationMap, symbol, "official_etf_inav", "latestPrice");
+  const officialEtfReferenceNav = pickCompare(validationMap, symbol, "official_etf_inav", "referenceNav");
+  const officialEtfYesterdayPrice = pickCompare(validationMap, symbol, "official_etf_inav", "yesterdayPrice");
+  const officialEtfPremiumDiscountPct = pickCompare(validationMap, symbol, "official_etf_inav", "premiumDiscountPct");
+  const officialEtfSourceType = getSourceValue(validationMap, symbol, "official_etf_inav", "sourceType");
+  const officialEtfNavDate = getSourceValue(validationMap, symbol, "official_etf_inav", "navDate");
+  const officialEtfAdapter = getSourceValue(validationMap, symbol, "official_etf_inav", "adapter");
+  const officialEtfSourceLabel = main.officialEtfInavEstimatedNav !== null && main.officialEtfInavEstimatedNav !== undefined
+    ? `ETF 即時估值${main.officialEtfInavNavDate ? `（${main.officialEtfInavNavDate}）` : ""}`
+    : officialEtfEstimatedNav.value !== null
+      ? `ETF 即時估值${officialEtfNavDate ? `（${officialEtfNavDate}）` : ""}`
+      : noCompare;
+  const officialEtfDisplay = {
+    estimatedNav: main.officialEtfInavEstimatedNav ?? officialEtfEstimatedNav.value,
+    latestPrice: main.officialEtfInavLatestPrice ?? officialEtfLatestPrice.value,
+    referenceNav: main.officialEtfInavReferenceNav ?? officialEtfReferenceNav.value,
+    yesterdayPrice: main.officialEtfInavYesterdayPrice ?? officialEtfYesterdayPrice.value,
+    premiumDiscountPct: main.officialEtfInavPremiumDiscountPct ?? officialEtfPremiumDiscountPct.value,
+    navDate: main.officialEtfInavNavDate || officialEtfNavDate || "",
+    sourceType: main.officialEtfInavSourceType || officialEtfSourceType || "",
+    adapter: main.officialEtfInavAdapter || officialEtfAdapter || "",
+    source: officialEtfSourceLabel,
+  };
+
   const finForeign3d = pickCompare(validationMap, symbol, "finmind", "foreign3d");
   const finTrust3d = pickCompare(validationMap, symbol, "finmind", "trust3d");
   const finDealer3d = pickCompare(validationMap, symbol, "finmind", "dealer3d");
@@ -2313,14 +2596,14 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
     (yahooDailyHigh.value !== null ? compareSourceValue("最高價抽樣", finDailyHigh.value, yahooDailyHigh.value, 0.1, yahooCompareOptions.dateNote || "外部 OHLCV 抽樣驗證。", finDailyHigh.value !== null ? "FinMind OHLCV" : getFieldSource(main, "dailyHigh"), yahooDailyHigh.value !== null ? yahooDailyHigh.source : noCompare, { ...yahooCompareOptions, toleranceLabel: "±0.1%" }) : null),
     (yahooDailyLow.value !== null ? compareSourceValue("最低價抽樣", finDailyLow.value, yahooDailyLow.value, 0.1, yahooCompareOptions.dateNote || "外部 OHLCV 抽樣驗證。", finDailyLow.value !== null ? "FinMind OHLCV" : getFieldSource(main, "dailyLow"), yahooDailyLow.value !== null ? yahooDailyLow.source : noCompare, { ...yahooCompareOptions, toleranceLabel: "±0.1%" }) : null),
 
-    (isEtf ? compareSourceValue("ETF TWSE MIS displayPrice", twseMisMainPriceValue, null, 0, twseMisDisplayPriceType.value === "mid" ? "TWSE MIS ETF z 缺值時，以五檔中間價作參考；不視為正式成交價。" : "TWSE MIS ETF 即時成交價 / 顯示價。", twseMisMainPriceValue !== null ? `${twseMisMainPriceSource}${twseMisTimeLabel}` : noCompare, "輔助資料", { statusOverride: twseMisMainPriceValue !== null ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
+    (isEtf ? compareSourceValue("ETF TWSE MIS displayPrice", twseMisMainPriceValue, null, 0, twseMisDisplayPriceType.value === "mid" ? "TWSE MIS z 缺值時，以五檔中間價作參考；不視為正式成交價。" : "TWSE MIS ETF 即時成交價 / 顯示價。", twseMisMainPriceValue !== null ? `${twseMisMainPriceSource}${twseMisTimeLabel}` : noCompare, "輔助資料", { statusOverride: twseMisMainPriceValue !== null ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
     (isEtf ? compareSourceValue("ETF TWSE MIS 成交量", twseMisVolume.value, null, 0, "TWSE MIS ETF 盤中成交量；用於流動性與價差陷阱判斷，不進短線分數。", twseMisVolume.value !== null ? `${twseMisVolume.source}${twseMisTimeLabel}` : noCompare, "輔助資料", { statusOverride: twseMisVolume.value !== null ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
     (isEtf ? compareSourceValue("ETF displayPriceType", twseMisDisplayPriceType.value ? 1 : null, null, 0, twseMisDisplayPriceType.value ? `顯示價型態：${twseMisDisplayPriceType.value}；last 為成交價，mid 為五檔中間參考價。` : "尚未取得 ETF 顯示價型態。", twseMisDisplayPriceType.value ? `TWSE MIS ${twseMisDisplayPriceType.value}` : noCompare, "輔助資料", { statusOverride: twseMisDisplayPriceType.value ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
-    (isEtf ? compareSourceValue("ETF NAV 連結 navUrl", main.navUrl ? 1 : null, null, 0, main.navUrl ? `TWSE MIS 提供投信 NAV 查詢入口：${main.navUrl}` : "尚未取得投信 NAV 連結；後續再驗證投信官方 NAV。", main.navUrl ? "TWSE MIS raw.nu" : noCompare, "輔助資料", { statusOverride: main.navUrl ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
-    (isEtf ? compareSourceValue("ETF 市價參考", yahooEtfMarketPrice.value, null, 0, "Yahoo ETF 溢價 / 折價頁輔助欄位；只作 ETF 小卡參考，不覆蓋主行情、不進分數。", yahooEtfMarketPrice.value !== null ? yahooEtfMarketPrice.source : noCompare, "輔助資料", { statusOverride: yahooEtfMarketPrice.value !== null ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
-    (isEtf ? compareSourceValue("ETF 折溢價%", yahooEtfPremiumDiscountPct.value, null, 0, "Yahoo ETF 溢價 / 折價頁輔助欄位；用於觀察是否追價或折價，不作官方驗證通過。", yahooEtfPremiumDiscountPct.value !== null ? yahooEtfPremiumDiscountPct.source : noCompare, "輔助資料", { statusOverride: yahooEtfPremiumDiscountPct.value !== null ? "已補值" : undefined, compareMode: "abs", toleranceLabel: "輔助" }) : null),
-    (isEtf ? compareSourceValue("ETF 漲跌幅", yahooEtfChangePct.value, null, 0, "Yahoo ETF 頁面輔助欄位；用於顯示當日 ETF 變化，不覆蓋 Google / FinMind 主欄位。", yahooEtfChangePct.value !== null ? yahooEtfChangePct.source : noCompare, "輔助資料", { statusOverride: yahooEtfChangePct.value !== null ? "已補值" : undefined, compareMode: "abs", toleranceLabel: "輔助" }) : null),
-    (isEtf ? compareSourceValue("ETF 區間差", yahooEtfRangeSpread.value, null, 0, "Yahoo ETF 頁面輔助欄位；觀察日內波動範圍，不進短線分數。", yahooEtfRangeSpread.value !== null ? yahooEtfRangeSpread.source : noCompare, "輔助資料", { statusOverride: yahooEtfRangeSpread.value !== null ? "已補值" : undefined, compareMode: "abs", toleranceLabel: "輔助" }) : null),
+    (isEtf ? compareSourceValue("ETF 即時估值", officialEtfDisplay.estimatedNav, null, 0, "ETF 官方即時估值；用於折溢價與追價風險判斷，不進短線分數。", officialEtfDisplay.estimatedNav !== null && officialEtfDisplay.estimatedNav !== undefined ? officialEtfDisplay.source : noCompare, "輔助資料", { statusOverride: officialEtfDisplay.estimatedNav !== null && officialEtfDisplay.estimatedNav !== undefined ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
+    (isEtf ? compareSourceValue("ETF 即時市價", officialEtfDisplay.latestPrice, twseMisMainPriceValue, 0.3, "ETF 官方即時市價需接近 TWSE MIS 主行情；兩者接近代表小卡市價口徑可信。", officialEtfDisplay.latestPrice !== null && officialEtfDisplay.latestPrice !== undefined ? officialEtfDisplay.source : noCompare, twseMisMainPriceValue !== null ? `${twseMisMainPriceSource}${twseMisTimeLabel}` : noCompare, { statusOverride: officialEtfDisplay.latestPrice !== null && officialEtfDisplay.latestPrice !== undefined ? undefined : "缺值", toleranceLabel: "±0.3%" }) : null),
+    (isEtf ? compareSourceValue("ETF 前日淨值", officialEtfDisplay.referenceNav, null, 0, officialEtfDisplay.navDate ? `官方前日淨值日期：${officialEtfDisplay.navDate}。` : "官方前日淨值日期尚未更新。", officialEtfDisplay.referenceNav !== null && officialEtfDisplay.referenceNav !== undefined ? officialEtfDisplay.source : noCompare, "輔助資料", { statusOverride: officialEtfDisplay.referenceNav !== null && officialEtfDisplay.referenceNav !== undefined ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
+    (isEtf ? compareSourceValue("ETF 折溢價%", officialEtfDisplay.premiumDiscountPct, null, 0, "官方即時折溢價；用於觀察追價或折價，不作短線分數。", officialEtfDisplay.premiumDiscountPct !== null && officialEtfDisplay.premiumDiscountPct !== undefined ? officialEtfDisplay.source : noCompare, "輔助資料", { statusOverride: officialEtfDisplay.premiumDiscountPct !== null && officialEtfDisplay.premiumDiscountPct !== undefined ? "已補值" : undefined, compareMode: "abs", toleranceLabel: "輔助" }) : null),
+    (isEtf ? compareSourceValue("ETF 估值來源", officialEtfDisplay.estimatedNav !== null && officialEtfDisplay.estimatedNav !== undefined ? 1 : null, null, 0, officialEtfDisplay.adapter ? "官方即時估值已同步；可用於折溢價與市價一致性檢查。" : "官方即時估值尚未同步。", officialEtfDisplay.estimatedNav !== null && officialEtfDisplay.estimatedNav !== undefined ? "ETF 即時估值" : noCompare, "輔助資料", { statusOverride: officialEtfDisplay.estimatedNav !== null && officialEtfDisplay.estimatedNav !== undefined ? "已補值" : undefined, toleranceLabel: "輔助" }) : null),
 
     (yahooMacd.value !== null ? compareSourceValue("MACD", finMacd.value, yahooMacd.value, 2, yahooCompareOptions.dateNote || "外部 OHLCV 對齊共同交易日後重算；對照主表 MACD。", "FinMind OHLCV + App計算", yahooMacd.value !== null ? yahooMacd.source + " + 同公式" : noCompare, { ...yahooCompareOptions, compareMode: "abs", toleranceLabel: "±2.00" }) : compareSourceValue("MACD", finMacd.value, null, 2, "主表技術欄位已接入；外部 OHLCV 尚未取得或未對齊共同交易日，暫作接入確認。", "FinMind OHLCV + App計算", "待外部 OHLCV", { statusOverride: "接入確認", compareMode: "abs", toleranceLabel: "待驗證" })),
     (yahooMacdSignal.value !== null ? compareSourceValue("MACD Signal", finMacdSignal.value, yahooMacdSignal.value, 2, yahooCompareOptions.dateNote || "外部 OHLCV 對齊共同交易日後重算；對照主表 Signal。", "FinMind OHLCV + App計算", yahooMacdSignal.value !== null ? yahooMacdSignal.source + " + 同公式" : noCompare, { ...yahooCompareOptions, compareMode: "abs", toleranceLabel: "±2.00" }) : compareSourceValue("MACD Signal", finMacdSignal.value, null, 2, "主表技術欄位已接入；外部 OHLCV 尚未取得或未對齊共同交易日，暫作接入確認。", "FinMind OHLCV + App計算", "待外部 OHLCV", { statusOverride: "接入確認", compareMode: "abs", toleranceLabel: "待驗證" })),
@@ -2404,8 +2687,8 @@ function validationGroupOf(label = "") {
 
 function validationActionTagOf(label = "") {
   const text = String(label || "");
-  if (/TWSE MIS 盤中價量|FinMind 日收盤|FinMind 日成交量|ETF 市價參考|三大法人3日|三大法人20日/.test(text)) return "mergeCandidate";
-  if (/ETF 漲跌幅/.test(text)) return "hideCandidate";
+  if (/TWSE MIS 盤中價量|FinMind 日收盤|FinMind 日成交量|ETF 即時市價|ETF 即時估值|ETF 折溢價%|三大法人3日|三大法人20日/.test(text)) return "mergeCandidate";
+  if (/ETF 備援/.test(text)) return "hideCandidate";
   return "keep";
 }
 
@@ -2437,7 +2720,7 @@ function validationSortKey(label = "") {
     "外資3日 foreign3d", "投信3日 trust3d", "自營商3日 dealer3d", "三大法人3日 institutional3d", "外資20日 foreign20d", "投信20日 trust20d", "自營商20日 dealer20d", "三大法人20日 institutional20d", "融資5日 marginChange5dPct", "融券5日 shortSaleChange5dPct", "融資20日 marginChange20dPct", "融券20日 shortSaleChange20dPct",
     "Nasdaq 一日變化", "SOX 一日變化", "台指期盤後 taifexAfterHoursReturn", "VIX 一日變化",
     "本益比 PER", "PBR", "殖利率 dividendYield", "EPS", "EPS 成長 epsGrowthYoY", "EPS TTM", "EPS TTM 成長 epsTtmGrowthYoY", "月營收 MoM revenueMoM", "月營收 YoY revenueYoY", "毛利率 grossMargin", "毛利率 QoQ 變化", "營益率 operatingMargin", "營益率 QoQ 變化", "負債比 debtRatio", "ROE TTM", "淨利率 netMargin", "財報季度數 financialQuarterCount",
-    "ETF TWSE MIS displayPrice", "ETF TWSE MIS 成交量", "ETF displayPriceType", "ETF NAV 連結 navUrl", "ETF 市價參考", "ETF 折溢價%", "ETF 漲跌幅", "ETF 區間差"
+    "ETF TWSE MIS displayPrice", "ETF TWSE MIS 成交量", "ETF displayPriceType", "ETF 即時估值", "ETF 即時市價", "ETF 前日淨值", "ETF 折溢價%", "ETF 估值來源"
   ];
   const idx = order.findIndex((item) => item === text);
   return idx >= 0 ? idx : 9999;
@@ -3103,14 +3386,26 @@ function InsightPanel({ insight }) {
   );
 }
 
-function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode }) {
+function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode, lastFetchMap = {}, marketIndex = null }) {
+  const refreshTime = formatLastFetch(lastFetchMap, "twse_mis") !== "尚未抓取" ? formatLastFetch(lastFetchMap, "twse_mis") : formatLastFetch(lastFetchMap, "google_csv");
+  const hasMarketIndex = marketIndex?.price !== null && marketIndex?.price !== undefined && Number.isFinite(Number(marketIndex.price));
+  const indexTimeText = marketIndex?.time ? `｜${compactSourceTime(marketIndex.time)}` : "";
+  const staleText = hasMarketIndex && marketIndex?.stale ? "｜沿用上次" : "";
+  const indexText = hasMarketIndex
+    ? `台股大盤：${displayValue(marketIndex.price)}${marketIndex.changePct !== null && marketIndex.changePct !== undefined ? `（${Number(marketIndex.changePct) >= 0 ? "+" : ""}${Number(marketIndex.changePct).toFixed(2)}%${marketIndex.change !== null && marketIndex.change !== undefined ? ` / ${Number(marketIndex.change) >= 0 ? "+" : ""}${number(marketIndex.change)}` : ""}）` : ""}${indexTimeText}${staleText}`
+    : "台股大盤：尚未取得";
+  const indexBadgeTone = hasMarketIndex
+    ? Number(marketIndex?.changePct) >= 0
+      ? "rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700"
+      : "rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-sm font-semibold text-rose-700"
+    : "rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600";
   return (
-    <Card className="rounded-xl shadow-sm">
-      <CardContent className="p-3 space-y-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div><h3 className="text-lg font-semibold flex items-center gap-2"><Icon name="bar" /> 全部股票 / ETF 總覽</h3><p className="text-xs text-slate-500 mt-0.5">依短線 V1 排序；鎖定約 5 檔高度。點擊短線、中線或長線查看評語。</p></div><Badge className="bg-slate-100 text-slate-700">資料模式：{dataMode}</Badge></div>
+    <Card className="rounded-2xl border border-slate-200 bg-white/95 shadow-sm">
+      <CardContent className="p-3 space-y-3 md:p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between"><div><h3 className="text-xl font-semibold flex items-center gap-2"><Icon name="bar" /> 全部股票 / ETF 總覽</h3><p className="text-xs text-slate-500 mt-0.5">依短線 V1 排序；追蹤清單上限 50 檔。點擊短線、中線或長線查看評語。</p></div><div className="flex flex-wrap items-center gap-2"><Badge className={indexBadgeTone}>{indexText}</Badge><Badge className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">刷新時間：{refreshTime}</Badge></div></div>
         <div className="max-h-[260px] overflow-y-scroll overflow-x-auto rounded-lg border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1140px] text-[15px]"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-14 px-2 py-2 text-center">排名</th><th>標的</th><th>類型</th><th>市場</th><th>現價</th><th>今日</th><th>短線</th><th>中線</th><th>長線</th><th>技術</th><th>籌碼</th><th>市場</th><th>建議</th><th>資料驗證</th><th className="w-20 text-center">操作</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.stock.symbol} className={`border-b last:border-0 cursor-pointer hover:bg-slate-50 ${selected === row.stock.symbol ? "bg-slate-100" : ""}`} onClick={() => onSelect(row.stock.symbol)}><td className="px-2 py-2 text-center font-medium tabular-nums">{index + 1}</td><td className="font-medium">{row.stock.symbol} {row.stock.name}{row.stock.nameSource ? <span className="ml-1 text-[11px] text-slate-400">({row.stock.nameSource})</span> : null}</td><td>{row.stock.type}</td><td>{row.stock.market}</td><td>{number(row.stock.price)}</td><td>{pct(row.derived.todayReturn)}</td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "short"); }}><ScoreBadge score={row.short.score100} /></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "mid"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td><button type="button" onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "long"); }}><Badge className="bg-slate-100 text-slate-700">待公式</Badge></button></td><td>{Math.round(row.tech)}</td><td>{Math.round(row.chip)}</td><td>{Math.round(row.market)}</td><td><Badge className={row.recommendation.tone}>{row.recommendation.label}</Badge></td><td><Badge className={row.validationState.tone}>{row.validationState.label}</Badge></td><td className="text-center"><Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onRemove(row.stock.symbol); }}>移除</Button></td></tr>)}</tbody></table></div>
         <div className="flex items-center justify-between text-[11px] text-slate-400">
-          <span>顯示區已鎖定約 5 檔高度；若標的超過可視範圍，請在表格內上下滾動。</span>
+          <span>追蹤清單上限 50 檔；顯示區維持約 5 檔高度，超過可視範圍請在表格內上下滾動。</span>
           <span>{rows.length} 檔標的</span>
         </div>
       </CardContent>
@@ -3304,7 +3599,7 @@ function etfPriceConsistencyDetail(stock) {
       state: "待資料",
       level: "neutral",
       diffText: "-",
-      summary: "Yahoo ETF 市價或 Google 主行情尚未完整，折溢價資料可靠度需保守看待。",
+      summary: "ETF 即時市價或主行情尚未完整，折溢價資料可靠度需保守看待。",
     };
   }
 
@@ -3316,7 +3611,7 @@ function etfPriceConsistencyDetail(stock) {
       state: "來源差異大",
       level: "danger",
       diffText,
-      summary: "Yahoo ETF 市價與 Google 主行情差距偏大，折溢價參考性下降，需先確認資料時點。",
+      summary: "ETF 即時市價與主行情差距偏大，折溢價參考性下降，需先確認資料時點。",
     };
   }
 
@@ -3325,7 +3620,7 @@ function etfPriceConsistencyDetail(stock) {
       state: "來源小差異",
       level: "warning",
       diffText,
-      summary: "Yahoo ETF 市價與 Google 主行情略有差異，可參考但不宜單獨判斷追價或折價。",
+      summary: "ETF 即時市價與主行情略有差異，可參考但不宜單獨判斷追價或折價。",
     };
   }
 
@@ -3333,7 +3628,7 @@ function etfPriceConsistencyDetail(stock) {
     state: "市價一致",
     level: "good",
     diffText,
-    summary: "Yahoo ETF 市價與 Google 主行情接近，折溢價資料可靠度較高。",
+    summary: "ETF 即時市價與主行情接近，折溢價資料可靠度較高。",
   };
 }
 
@@ -3527,7 +3822,7 @@ function etfAuxiliaryRiskSummary({ premium, consistency, liquidity, intraday, te
 function buildEtfRiskAnalysis(stock) {
   if (!isEtfAsset(stock)) return null;
 
-  const sourcePage = stock.yahooEtfSourcePage === "premium" ? "溢價排行" : stock.yahooEtfSourcePage === "discount" ? "折價排行" : "ETF 頁";
+  const sourcePage = stock.yahooEtfSource === "official_etf_inav" ? "即時估值" : stock.yahooEtfSourcePage === "premium" ? "溢價排行" : stock.yahooEtfSourcePage === "discount" ? "折價排行" : "ETF 頁";
   const hasData = hasYahooEtfData(stock);
   const premium = yahooEtfPremiumDetail(stock.yahooEtfPremiumDiscountPct);
   const intraday = yahooEtfIntradayRangeDetail(stock.yahooEtfRangeSpread, stock.yahooEtfMarketPrice);
@@ -3583,7 +3878,7 @@ function yahooEtfPremiumRuleText() {
 
 ETF 輔助判斷要同時看五件事：
 1. 折溢價：判斷市價相對淨值是否追價或折價。
-2. 市價一致性：Yahoo ETF 市價需接近 Google 主行情，否則折溢價可靠度下降。
+2. 市價一致性：即時市價需接近主行情，否則折溢價可靠度下降。
 3. 流動性：量比過低時，折溢價可能被買賣價差或造市報價扭曲。
 4. 日內波動：區間差過大時，折溢價容易失真。
 5. 技術同步：折價但技術轉弱不等於便宜，溢價且技術過熱則追價風險更高。
@@ -3595,7 +3890,7 @@ ETF 輔助判斷要同時看五件事：
 -0.30% ～ -0.80%：小幅折價，需觀察是否為短線賣壓。
 < -0.80%：高折價，需確認流動性、成分資產波動與市場風險。
 
-這個 ETF 輔助風險小卡不覆蓋 Google / FinMind / TWSE 主資料，不參與短線總分，也不作為單獨買賣訊號。`;
+這個 ETF 輔助風險小卡不改變主行情與短線總分，也不作為單獨買賣訊號。`;
 }
 
 function YahooEtfInfoCard({ stock }) {
@@ -3618,7 +3913,7 @@ function YahooEtfInfoCard({ stock }) {
           </div>
           <div className="mt-2 font-semibold leading-6">{analysis.summaryLine}</div>
         </div>
-        <div className="mt-2 leading-6 text-slate-600">Yahoo ETF 輔助資料尚未取得；先以 Google 量能、FinMind 技術面與 TWSE / TWSE MIS 參考資料為主，不影響短線 V1 主分數。</div>
+        <div className="mt-2 leading-6 text-slate-600">ETF 即時估值尚未取得；先以主行情、量能與技術面為主，不影響短線 V1 主分數。</div>
       </div>
     );
   }
@@ -3633,13 +3928,13 @@ function YahooEtfInfoCard({ stock }) {
           <div className="mt-1 text-xs text-slate-500">折溢價 + 市價一致性 + 流動性 + 日內波動 + 技術同步；不進短線總分。</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className="bg-slate-100 text-slate-700">Yahoo ETF｜{sourcePage}</Badge>
+          <Badge className="bg-slate-100 text-slate-700">ETF 即時估值｜{sourcePage}</Badge>
         </div>
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-6">
-        <div><div className="text-xs text-slate-500">Google 主價</div><div className="font-medium">{displayValue(stock.price)}</div></div>
-        <div><div className="text-xs text-slate-500">Yahoo 市價</div><div className="font-medium">{displayValue(stock.yahooEtfMarketPrice)}</div></div>
+        <div><div className="text-xs text-slate-500">主行情</div><div className="font-medium">{displayValue(stock.price)}</div></div>
+        <div><div className="text-xs text-slate-500">即時市價</div><div className="font-medium">{displayValue(stock.yahooEtfMarketPrice)}</div></div>
         <div><div className="text-xs text-slate-500">價差</div><div className="font-medium">{consistency.diffText}</div></div>
         <div><div className="text-xs text-slate-500">折溢價</div><div className="font-medium">{pct(stock.yahooEtfPremiumDiscountPct)}</div></div>
         <div><div className="text-xs text-slate-500">量比</div><div className="font-medium">{liquidity.ratioText}</div></div>
@@ -3695,7 +3990,7 @@ function YahooEtfInfoCard({ stock }) {
         {premium.action} ETF 輔助小卡只用來辨識追價價差、流動性陷阱與資料不同步，不改變短線 V1 主分數。
       </div>
 
-      <div className="mt-2 text-xs leading-5 text-slate-500">Yahoo ETF 只作 ETF 輔助資料；不覆蓋 FinMind / TWSE / Google 主資料，不參與短線分數。若 parser 未匹配到標的，維持缺值並回到技術面與量能主框架。</div>
+      <div className="mt-2 text-xs leading-5 text-slate-500">ETF 即時估值僅作折溢價、追價風險與流動性輔助判讀；不參與短線 V1 主分數。若資料暫缺，維持缺值並回到技術面與量能主框架。</div>
     </div>
   );
 }
@@ -3853,11 +4148,79 @@ function compactGoogleStalePreview(googleDebug, maxRows = 20) {
   return rows.length > maxRows ? `${shown}\n...另 ${rows.length - maxRows} 檔` : shown;
 }
 
-function SourceConnectorTable({ config, onConfigChange, onSmartRefresh, onLoadGoogle, onLoadFinMind, onLoadTwse, onLoadTwseMis, onLoadMarket, onLoadDerivatives, onLoadYahoo, onLoadYahooEtf, loading, apiMessage, lastFetchMap, stocks, googleDebug }) {
-  const plan = getSourceConnectorPlan(config);
-  const policies = ["google_csv", "twse_proxy", "twse_mis", "finmind_proxy", "finmind_market", "finmind_derivatives", "yahoo_ohlcv", "yahoo_etf"].map((source) => ({ source, ...getSourcePolicy(source), lastFetch: formatLastFetch(lastFetchMap, source) }));
+function SourceConnectorTable({ config, onConfigChange, onSmartRefresh, onLoadGoogle, onLoadFinMind, onLoadTwse, onLoadTwseMis, onLoadMarket, onLoadDerivatives, onLoadYahoo, onLoadYahooEtf, onLoadOfficialEtfInav, loading, apiMessage, lastFetchMap, sourceRuntimeMap = {}, stocks, googleDebug }) {
+  const sourceDisplayOrder = [
+    "twse_mis",
+    "official_etf_inav",
+    "google_csv",
+    "twse_proxy",
+    "finmind_proxy",
+    "finmind_market",
+    "finmind_derivatives",
+    "yahoo_ohlcv",
+    "yahoo_etf",
+  ];
+
+  const sourceStageLabel = {
+    twse_mis: "即時核心",
+    official_etf_inav: "即時核心",
+    google_csv: "即時輔助",
+    twse_proxy: "盤後官方",
+    finmind_proxy: "技術主資料",
+    finmind_market: "市場補資料",
+    finmind_derivatives: "風險補資料",
+    yahoo_ohlcv: "備援驗證",
+    yahoo_etf: "備援資料",
+  };
+
+  const policies = sourceDisplayOrder.map((source) => {
+    const runtime = sourceRuntimeMap[source];
+    const frontFetch = formatLastFetch(lastFetchMap, source);
+    return {
+      source,
+      stageLabel: sourceStageLabel[source] || "資料源",
+      ...getSourcePolicy(source),
+      lastFetch: formatSourceRuntimeInfo(runtime, frontFetch),
+      frontFetch,
+      runtime,
+    };
+  });
+
+  const policyBySource = Object.fromEntries(policies.map((item) => [item.source, item]));
+  const sourceGroups = [
+    {
+      title: "即時區",
+      description: "盤中會自動刷新或同步更新；用來確認目前行情、ETF 即時估值與 Google 輔助行情。",
+      sources: ["twse_mis", "official_etf_inav", "google_csv"],
+    },
+    {
+      title: "非即時資料區",
+      description: "啟動預熱 / 主更新 / 固定時段 cache；用於官方盤後校正、技術分數、籌碼與市場風險資料。",
+      sources: ["twse_proxy", "finmind_proxy", "finmind_market", "finmind_derivatives"],
+    },
+    {
+      title: "救援區",
+      description: "只作備援與抽樣驗證，不覆蓋主資料、不參與短線分數。全站追蹤上限已由總覽控管，此處不重複顯示保護上限。",
+      sources: ["yahoo_ohlcv", "yahoo_etf"],
+    },
+  ].map((group) => ({
+    ...group,
+    items: group.sources.map((source) => policyBySource[source]).filter(Boolean),
+  }));
   const googleTemplate = buildGoogleVerifySheetTemplate(stocks);
-  return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料來源串接層</h3><p className="text-xs text-slate-500">Google Sheet 仍為低頻資料中繼；TWSE MIS 只新增盤中價量。</p><div className="grid gap-2 md:grid-cols-3"><Input placeholder="Google Sheet 公開 CSV URL" value={config.googleCsvUrl} onChange={(e) => onConfigChange({ ...config, googleCsvUrl: e.target.value })} /><Input placeholder="FinMind stocks URL，例如 /api/finmind/stocks" value={config.finmindProxyUrl} onChange={(e) => onConfigChange({ ...config, finmindProxyUrl: e.target.value })} /><Input placeholder="TWSE proxy URL，例如 /api/twse/stocks" value={config.twseProxyUrl} onChange={(e) => onConfigChange({ ...config, twseProxyUrl: e.target.value })} /><Input placeholder="TWSE MIS URL，例如 /api/twse/mis" value={config.twseMisProxyUrl || DEFAULT_TWSE_MIS_PROXY_URL} onChange={(e) => onConfigChange({ ...config, twseMisProxyUrl: e.target.value })} /><Input placeholder="FinMind market URL，例如 /api/finmind/market" value={config.finmindMarketProxyUrl} onChange={(e) => onConfigChange({ ...config, finmindMarketProxyUrl: e.target.value })} /><Input placeholder="FinMind derivatives URL，例如 /api/finmind/derivatives" value={config.finmindDerivativesProxyUrl} onChange={(e) => onConfigChange({ ...config, finmindDerivativesProxyUrl: e.target.value })} /><Input placeholder="Yahoo OHLCV URL，例如 /api/yahoo/ohlcv" value={config.yahooOhlcvProxyUrl} onChange={(e) => onConfigChange({ ...config, yahooOhlcvProxyUrl: e.target.value })} /><Input placeholder="Yahoo ETF URL，例如 /api/yahoo/etf" value={config.yahooEtfProxyUrl} onChange={(e) => onConfigChange({ ...config, yahooEtfProxyUrl: e.target.value })} /></div><div className="flex flex-wrap items-center gap-2">
+  return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料來源串接層</h3><p className="text-xs text-slate-500">依「即時區 / 非即時資料區 / 救援區」排序；下方角色總覽已整合完整資料源說明。</p><div className="grid gap-2 md:grid-cols-3">
+  <Input placeholder="TWSE MIS URL，例如 /api/twse/mis" value={config.twseMisProxyUrl || DEFAULT_TWSE_MIS_PROXY_URL} onChange={(e) => onConfigChange({ ...config, twseMisProxyUrl: e.target.value })} />
+  <Input placeholder="ETF 即時估值 URL，例如 /api/etf/inav" value={config.etfInavProxyUrl || DEFAULT_ETF_INAV_PROXY_URL} onChange={(e) => onConfigChange({ ...config, etfInavProxyUrl: e.target.value })} />
+  <Input placeholder="Google Sheet 公開 CSV URL" value={config.googleCsvUrl} onChange={(e) => onConfigChange({ ...config, googleCsvUrl: e.target.value })} />
+
+  <Input placeholder="TWSE OpenAPI URL，例如 /api/twse/stocks" value={config.twseProxyUrl} onChange={(e) => onConfigChange({ ...config, twseProxyUrl: e.target.value })} />
+  <Input placeholder="FinMind Daily URL，例如 /api/finmind/stocks" value={config.finmindProxyUrl} onChange={(e) => onConfigChange({ ...config, finmindProxyUrl: e.target.value })} />
+  <Input placeholder="FinMind Market URL，例如 /api/finmind/market" value={config.finmindMarketProxyUrl} onChange={(e) => onConfigChange({ ...config, finmindMarketProxyUrl: e.target.value })} />
+
+  <Input placeholder="FinMind Derivatives URL，例如 /api/finmind/derivatives" value={config.finmindDerivativesProxyUrl} onChange={(e) => onConfigChange({ ...config, finmindDerivativesProxyUrl: e.target.value })} />
+  <Input placeholder="Yahoo OHLCV 備援 URL，例如 /api/yahoo/ohlcv" value={config.yahooOhlcvProxyUrl} onChange={(e) => onConfigChange({ ...config, yahooOhlcvProxyUrl: e.target.value })} />
+  <Input placeholder="Yahoo ETF 備援 URL，例如 /api/yahoo/etf" value={config.yahooEtfProxyUrl} onChange={(e) => onConfigChange({ ...config, yahooEtfProxyUrl: e.target.value })} />
+</div><div className="flex flex-wrap items-center gap-2">
   <Button onClick={onSmartRefresh} disabled={loading || (!config.googleCsvUrl && !config.finmindProxyUrl && !config.twseProxyUrl && !config.twseMisProxyUrl && !config.finmindMarketProxyUrl && !config.finmindDerivativesProxyUrl && !config.yahooOhlcvProxyUrl && !config.yahooEtfProxyUrl)}>更新資料</Button>
   {apiMessage && <Badge className={apiMessage.includes("成功") || apiMessage.includes("已更新") ? "bg-emerald-100 text-emerald-800" : "bg-yellow-100 text-yellow-800"}>{apiMessage}</Badge>}
 </div>
@@ -3866,10 +4229,40 @@ function SourceConnectorTable({ config, onConfigChange, onSmartRefresh, onLoadGo
   <div className="mt-3 flex flex-wrap gap-2">
     <Button onClick={onLoadTwse} disabled={loading || !config.twseProxyUrl}>讀取 TWSE</Button>
     <Button onClick={onLoadTwseMis} disabled={loading || !config.twseMisProxyUrl}>TWSE MIS 盤中主價量</Button>
-    <Button onClick={onLoadFinMind} disabled={loading || !config.finmindProxyUrl}>讀取 FinMind</Button><Button onClick={onLoadMarket} disabled={loading || !config.finmindMarketProxyUrl}>讀取 Market</Button><Button onClick={onLoadDerivatives} disabled={loading || !config.finmindDerivativesProxyUrl}>讀取 Derivatives</Button><Button onClick={onLoadYahoo} disabled={loading || !config.yahooOhlcvProxyUrl}>Yahoo 抽樣驗證</Button><Button onClick={onLoadYahooEtf} disabled={loading || !config.yahooEtfProxyUrl}>Yahoo ETF 輔助</Button>
+    <Button onClick={onLoadFinMind} disabled={loading || !config.finmindProxyUrl}>讀取 FinMind</Button><Button onClick={onLoadMarket} disabled={loading || !config.finmindMarketProxyUrl}>讀取 Market</Button><Button onClick={onLoadDerivatives} disabled={loading || !config.finmindDerivativesProxyUrl}>讀取 Derivatives</Button><Button onClick={onLoadYahoo} disabled={loading || !config.yahooOhlcvProxyUrl}>Yahoo 抽樣驗證</Button><Button onClick={onLoadOfficialEtfInav} disabled={loading || !config.etfInavProxyUrl}>ETF 即時估值</Button><Button onClick={onLoadYahooEtf} disabled={loading || !config.yahooEtfProxyUrl}>ETF 備援</Button>
   </div>
-  <div className="mt-2 text-slate-400">開發測試用；GoogleFinance 已由上方「更新資料」與 20 秒自動刷新處理，這裡只保留其他來源的手動測試。</div>
-</details><div className="grid gap-2 md:grid-cols-4">{policies.map((item) => <div key={item.source} className="rounded-lg border bg-white p-3 text-xs text-slate-600"><div className="mb-1 font-semibold text-slate-900">{item.label}</div><div>Timeout：{item.timeoutMs / 1000} 秒</div><div>手動冷卻：{formatDurationMs(item.cooldownMs)}</div><div>自動刷新：{item.autoRefreshMs ? `每 ${formatDurationMs(item.autoRefreshMs)}` : "未設定"}</div>{item.maxSymbols && <div>檔數限制：最多 {item.maxSymbols} 檔</div>}<div>上次：{item.lastFetch}</div><div className="mt-1 text-slate-400 line-clamp-3">{item.cacheNote}</div></div>)}</div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full text-sm"><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[130px] py-2">來源</th><th className="w-[190px]">角色</th><th className="w-[90px]">狀態</th><th>欄位 / 串接方式</th></tr></thead><tbody>{plan.map((item) => <tr key={item.name} className="border-b last:border-0 align-top"><td className="py-2 font-medium">{item.name}</td><td>{item.role}</td><td><Badge className={item.status.includes("可") ? "bg-emerald-100 text-emerald-800" : item.status.includes("待") ? "bg-yellow-100 text-yellow-800" : "bg-slate-100 text-slate-700"}>{item.status}</Badge></td><td className="text-slate-600"><div>{item.fields}</div><div className="mt-1 text-xs text-slate-500">{item.method}</div></td></tr>)}</tbody></table></div>{googleDebug && <div className="rounded-xl border bg-white p-3 text-xs text-slate-600"><div className="font-semibold text-slate-900">Google CSV 讀取診斷</div>{googleDebug.error ? <div className="text-red-600">錯誤：{googleDebug.error}</div> : <div className="space-y-1"><div>讀取方式：{googleDebug.mode}</div><div>CSV 列數：{googleDebug.parsedRows}</div><div>已對上：{googleDebug.matchedSymbols?.join(", ") || "無"}</div><div>未對上：{googleDebug.unmatchedSymbols?.join(", ") || "無"}</div><div>欄位：{googleDebug.headers?.join(" / ") || "無"}</div><div>rawDataMap：{googleDebug.rawDataMap ? Object.keys(googleDebug.rawDataMap).join(" / ") : "無"}</div>
+  <div className="mt-2 text-slate-400">開發測試用；GoogleFinance 已由上方「更新資料」與 20 秒自動刷新處理。FinMind 會啟動預熱供分數使用，也接回主更新資料；但不做 interval 自動刷新、不帶 force。這裡保留單一來源手動測試。</div>
+</details>
+<div className="space-y-3">
+  {sourceGroups.map((group) => (
+    <section key={group.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-semibold text-slate-900">{group.title}</div>
+          <div className="mt-0.5 text-xs text-slate-500">{group.description}</div>
+        </div>
+        <Badge className="bg-white text-slate-700">{group.items.length} 個來源</Badge>
+      </div>
+      <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
+        {group.items.map((item) => (
+          <div key={item.source} className="rounded-lg border bg-white p-3 text-xs text-slate-600">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="font-semibold text-slate-900">{item.label}</span>
+              <Badge className="bg-slate-100 text-slate-700">{item.stageLabel}</Badge>
+            </div>
+            <div>Timeout：{item.timeoutMs / 1000} 秒</div>
+            <div>手動冷卻：{formatDurationMs(item.cooldownMs)}</div>
+            <div>自動刷新：{formatPolicyAutoRefresh(item)}</div>
+            <div>資料 / 快取：{item.lastFetch}</div>
+            {item.runtime?.cache ? <div className="text-slate-500">{explainCacheRuntime(item.runtime)}</div> : null}
+            <div>前端觸發：{item.frontFetch}</div>
+            <div className="mt-1 text-slate-400 line-clamp-3">{item.cacheNote}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  ))}
+</div>{googleDebug && <div className="rounded-xl border bg-white p-3 text-xs text-slate-600"><div className="font-semibold text-slate-900">Google CSV 讀取診斷</div>{googleDebug.error ? <div className="text-red-600">錯誤：{googleDebug.error}</div> : <div className="space-y-1"><div>讀取方式：{googleDebug.mode}</div><div>CSV 列數：{googleDebug.parsedRows}</div><div>已對上：{googleDebug.matchedSymbols?.join(", ") || "無"}</div><div>未對上：{googleDebug.unmatchedSymbols?.join(", ") || "無"}</div><div>欄位：{googleDebug.headers?.join(" / ") || "無"}</div><div>rawDataMap：{googleDebug.rawDataMap ? Object.keys(googleDebug.rawDataMap).join(" / ") : "無"}</div>
 <div>接受更新：{Array.isArray(googleDebug.acceptedSymbols) && googleDebug.acceptedSymbols.length ? `${googleDebug.acceptedSymbols.length} 檔｜${googleDebug.acceptedSymbols.slice(0, 12).join(" / ")}${googleDebug.acceptedSymbols.length > 12 ? ` ...另 ${googleDebug.acceptedSymbols.length - 12} 檔` : ""}` : "無"}{Array.isArray(googleDebug.staleSymbols) && googleDebug.staleSymbols.length ? `；略過舊快照 ${googleDebug.staleSymbols.length} 檔` : ""}</div>
 <div className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2">CSV 關鍵摘要：{compactGoogleCsvRowsPreview(googleDebug, 20)}</div>
 <div className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2">已採用行情：{compactGoogleAcceptedPreview(googleDebug, 20)}</div>
@@ -3886,16 +4279,20 @@ export default function StockShortV1App() {
   const [addError, setAddError] = useState("");
   const [insightTarget, setInsightTarget] = useState(null);
   const [dataMode, setDataMode] = useState(DEFAULT_DATA_MODE);
-  const [apiConfig, setApiConfig] = useState({ googleCsvUrl: DEFAULT_GOOGLE_SHEET_CSV_URL, finmindProxyUrl: DEFAULT_FINMIND_PROXY_URL, finmindMarketProxyUrl: DEFAULT_FINMIND_MARKET_PROXY_URL, finmindDerivativesProxyUrl: DEFAULT_FINMIND_DERIVATIVES_PROXY_URL, twseProxyUrl: DEFAULT_TWSE_PROXY_URL, twseMisProxyUrl: DEFAULT_TWSE_MIS_PROXY_URL, yahooOhlcvProxyUrl: DEFAULT_YAHOO_OHLCV_PROXY_URL, yahooEtfProxyUrl: DEFAULT_YAHOO_ETF_PROXY_URL });
+  const [apiConfig, setApiConfig] = useState({ googleCsvUrl: DEFAULT_GOOGLE_SHEET_CSV_URL, finmindProxyUrl: DEFAULT_FINMIND_PROXY_URL, finmindMarketProxyUrl: DEFAULT_FINMIND_MARKET_PROXY_URL, finmindDerivativesProxyUrl: DEFAULT_FINMIND_DERIVATIVES_PROXY_URL, twseProxyUrl: DEFAULT_TWSE_PROXY_URL, twseMisProxyUrl: DEFAULT_TWSE_MIS_PROXY_URL, yahooOhlcvProxyUrl: DEFAULT_YAHOO_OHLCV_PROXY_URL, yahooEtfProxyUrl: DEFAULT_YAHOO_ETF_PROXY_URL, etfInavProxyUrl: DEFAULT_ETF_INAV_PROXY_URL });
   const [apiLoading, setApiLoading] = useState(false);
   const googleRefreshingRef = useRef(false);
   const googleAutoRequestSeqRef = useRef(0);
   const googleLatestTradeTimeRef = useRef({});
   const twseMisRefreshingRef = useRef(false);
+  const startupCacheWarmupRef = useRef(false);
+  const startupFinMindWarmupRef = useRef(false);
   const twseMisLatestTradeTimeRef = useRef({});
   const googleLatestTradeTimeTextRef = useRef({});
   const [apiMessage, setApiMessage] = useState("");
+  const [marketIndex, setMarketIndex] = useState(null);
   const [lastFetchMap, setLastFetchMap] = useState({});
+  const [sourceRuntimeMap, setSourceRuntimeMap] = useState({});
   const [validationMap, setValidationMap] = useState({});
   const [googleDebug, setGoogleDebug] = useState(null);
     const [weightConfig, setWeightConfig] = useState(cloneWeightConfig());
@@ -3920,6 +4317,15 @@ export default function StockShortV1App() {
   }, [stocks, stocksHydrated]);
 
   useEffect(() => {
+    const persisted = loadPersistedMarketIndex();
+    if (persisted) setMarketIndex((prev) => prev || persisted);
+  }, []);
+
+  useEffect(() => {
+    if (marketIndex?.price && !marketIndex?.stale) persistMarketIndex(marketIndex);
+  }, [marketIndex]);
+
+  useEffect(() => {
     setStocks((prev) => fillNamesFromValidationMap(prev, validationMap));
   }, [validationMap]);
 
@@ -3928,6 +4334,18 @@ export default function StockShortV1App() {
   const overviewRows = useMemo(() => buildOverviewRows(stocks, validationMap, weightConfig), [stocks, validationMap, weightConfig]);
   const activeInsightRow = insightTarget ? overviewRows.find((row) => row.stock.symbol === insightTarget.symbol) : null;
   const activeInsight = insightTarget ? getHorizonInsight(activeInsightRow, insightTarget.horizon) : null;
+  function recordSourceRuntime(source, runtime) {
+    if (!source || !runtime) return;
+    setSourceRuntimeMap((prev) => ({
+      ...prev,
+      [source]: {
+        ...(prev[source] || {}),
+        ...runtime,
+        updatedAt: Date.now(),
+      },
+    }));
+  }
+
   const shortV1 = useMemo(() => scoreShortV1(current, weightConfig), [current, weightConfig]);
   const midV1 = useMemo(() => scoreMidV1(current, weightConfig), [current, weightConfig]);
   const longV1 = useMemo(() => scoreLongV1(current, weightConfig), [current, weightConfig]);
@@ -3949,6 +4367,7 @@ export default function StockShortV1App() {
   function addAsset() {
     const symbol = normalizeStockSymbol(newAsset.symbol);
     if (!symbol) { setAddError("請輸入股票或 ETF 代號。"); return; }
+    if (stocks.length >= MAX_TRACKED_ASSETS) { setAddError(`目前上限為 ${MAX_TRACKED_ASSETS} 檔；若要新增，請先移除其他標的。`); return; }
     if (stocks.some((stock) => stock.symbol === symbol)) { setAddError(`${symbol} 已在總覽中。`); return; }
     const asset = createAssetTemplate({ ...newAsset, symbol });
     setStocks((prev) => [...prev, asset]);
@@ -3987,7 +4406,43 @@ export default function StockShortV1App() {
         applyDefinedNumber(next, "yahooEtfPremiumDiscountPct", row.premiumDiscountPct);
         next.yahooEtfSourcePage = row.sourcePage || "";
         next.yahooEtfFetchedAt = row.fetchedAt || "";
-        next.yahooEtfSource = "Yahoo ETF";
+        next.yahooEtfSource = "ETF 備援";
+      }
+      return next;
+    });
+  }
+
+
+  function mergeOfficialEtfInavToStocks(currentStocks, officialRows = []) {
+    const rows = Array.isArray(officialRows) ? officialRows : [];
+    const bySymbol = new Map(rows.map((row) => [normalizeStockSymbol(row.symbol || row.stock_id), row]));
+
+    return currentStocks.map((stock) => {
+      const symbol = normalizeStockSymbol(stock.symbol);
+      const row = bySymbol.get(symbol);
+      if (!row || row.parseStatus !== "PASS") return stock;
+
+      const next = { ...stock };
+      if (isEtfAsset(next)) {
+        applyDefinedNumber(next, "officialEtfInavEstimatedNav", row.estimatedNav);
+        applyDefinedNumber(next, "officialEtfInavLatestPrice", row.latestPrice);
+        applyDefinedNumber(next, "officialEtfInavReferenceNav", row.referenceNav);
+        applyDefinedNumber(next, "officialEtfInavYesterdayPrice", row.yesterdayPrice);
+        applyDefinedNumber(next, "officialEtfInavPremiumDiscountPct", row.premiumDiscountPct);
+        next.officialEtfInavNavDate = row.navDate || "";
+        next.officialEtfInavSourceType = row.sourceType || "";
+        next.officialEtfInavAdapter = row.adapter || "";
+        next.officialEtfInavUpdatedAt = row.dataTime || row.navDate || "";
+
+        // Reuse the existing ETF risk-card fields to avoid a large UI rewrite.
+        applyDefinedNumber(next, "yahooEtfMarketPrice", row.latestPrice);
+        applyDefinedNumber(next, "yahooEtfPremiumDiscountPct", row.premiumDiscountPct);
+        next.yahooEtfRangeHigh = next.yahooEtfRangeHigh ?? null;
+        next.yahooEtfRangeLow = next.yahooEtfRangeLow ?? null;
+        next.yahooEtfRangeSpread = next.yahooEtfRangeSpread ?? null;
+        next.yahooEtfSourcePage = "official_inav";
+        next.yahooEtfFetchedAt = row.dataTime || row.navDate || "";
+        next.yahooEtfSource = "official_etf_inav";
       }
       return next;
     });
@@ -4241,6 +4696,13 @@ export default function StockShortV1App() {
       const preservedNote = completeness > 0 && completeness < 0.5 ? "；公式欄不完整，已保留上一輪成功值" : "";
       const firstAccepted = Object.entries(acceptedRawDataMap)[0];
       const firstTradeTime = firstAccepted?.[1]?.tradetime || "";
+      recordSourceRuntime(source, buildApiSourceRuntime({
+        source,
+        json,
+        dataTime: firstTradeTime || firstAccepted?.[1]?.updatedAt || json?.fetchedAt || "",
+        count: Object.keys(acceptedRawDataMap).length,
+        note: staleSymbols.length ? `舊快照 ${staleSymbols.length} 檔` : "",
+      }));
       const staleNote = staleSymbols.length ? `；收到較舊 CSV，保留較新行情（${staleSymbols.length} 檔）` : "";
       if (silent) {
         const clock = new Date().toLocaleTimeString("zh-TW", { hour12: false });
@@ -4301,19 +4763,19 @@ export default function StockShortV1App() {
     const intervalMs = policy.autoRefreshMs || 15 * 1000;
     let cancelled = false;
 
-    const tick = async () => {
+    const tick = async (forceOnce = false) => {
       if (cancelled || twseMisRefreshingRef.current) return;
-      if (!isTwseMisAutoWindow()) return;
+      if (!forceOnce && !isTwseMisAutoWindow()) return;
 
       twseMisRefreshingRef.current = true;
       try {
-        await loadTwseMisVolume(null, { silent: true, skipCooldown: true, auto: true });
+        await loadTwseMisVolume(null, { silent: true, skipCooldown: true, auto: !forceOnce });
       } finally {
         twseMisRefreshingRef.current = false;
       }
     };
 
-    const firstTimer = window.setTimeout(tick, 1500);
+    const firstTimer = window.setTimeout(() => tick(true), 1500);
     const intervalId = window.setInterval(tick, intervalMs);
 
     return () => {
@@ -4322,6 +4784,93 @@ export default function StockShortV1App() {
       window.clearInterval(intervalId);
     };
   }, [apiConfig.twseMisProxyUrl, stocks.map((stock) => stock.symbol).join(",")]);
+
+
+  useEffect(() => {
+    if (!stocksHydrated) return undefined;
+    if (startupCacheWarmupRef.current) return undefined;
+
+    startupCacheWarmupRef.current = true;
+    let cancelled = false;
+
+    const warmup = async () => {
+      if (cancelled) return;
+      const symbols = stocks.map((stock) => normalizeStockSymbol(stock.symbol)).filter(Boolean);
+      const etfSymbols = stocks.filter(isEtfAsset).map((stock) => normalizeStockSymbol(stock.symbol)).filter(Boolean);
+
+      // Startup warmup must call the normal loaders, not a raw warmRoute fetch.
+      // The loaders update validationMap, lastFetchMap and sourceRuntimeMap.
+      // Otherwise route cache is created but the validation table still shows "尚無比對來源".
+      const tasks = [];
+
+      if (apiConfig.twseProxyUrl && symbols.length) {
+        tasks.push(loadTwseOpenApi(symbols));
+      }
+
+      if (apiConfig.yahooOhlcvProxyUrl && symbols.length) {
+        tasks.push(loadYahooOhlcv(symbols));
+      }
+
+      if (apiConfig.yahooEtfProxyUrl && etfSymbols.length) {
+        tasks.push(loadYahooEtf(etfSymbols));
+      }
+
+      await Promise.allSettled(tasks);
+    };
+
+    const timer = window.setTimeout(warmup, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    stocksHydrated,
+    apiConfig.twseProxyUrl,
+    apiConfig.yahooOhlcvProxyUrl,
+    apiConfig.yahooEtfProxyUrl,
+    stocks.map((stock) => stock.symbol).join(","),
+  ]);
+
+
+  useEffect(() => {
+    if (!stocksHydrated) return undefined;
+    if (startupFinMindWarmupRef.current) return undefined;
+
+    startupFinMindWarmupRef.current = true;
+    let cancelled = false;
+
+    const warmupFinMind = async () => {
+      if (cancelled) return;
+      const symbols = stocks.map((stock) => normalizeStockSymbol(stock.symbol)).filter(Boolean);
+      if (!symbols.length) return;
+
+      // FinMind is needed for technical score. Warm it up once on startup, but never with force.
+      // The route side has 1h cache + stale-if-error, so this should reuse cache when available.
+      try {
+        if (apiConfig.finmindProxyUrl) await loadFinMindProxy(symbols);
+        if (cancelled) return;
+        if (apiConfig.finmindMarketProxyUrl) await loadFinMindMarket();
+        if (cancelled) return;
+        if (apiConfig.finmindDerivativesProxyUrl) await loadFinMindDerivatives();
+      } catch {
+        // Individual loaders already set apiMessage; keep startup warmup non-fatal.
+      }
+    };
+
+    const timer = window.setTimeout(warmupFinMind, 4500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    stocksHydrated,
+    apiConfig.finmindProxyUrl,
+    apiConfig.finmindMarketProxyUrl,
+    apiConfig.finmindDerivativesProxyUrl,
+    stocks.map((stock) => stock.symbol).join(","),
+  ]);
 
 
   async function loadFinMindProxy(symbolOverride = null) {
@@ -4435,6 +4984,7 @@ export default function StockShortV1App() {
     try {
       const requestSymbols = Array.isArray(symbolOverride) && symbolOverride.length ? symbolOverride : stocks.map((stock) => stock.symbol);
       const rows = await fetchTwseMisRows(requestSymbols, policy.timeoutMs, apiConfig.twseMisProxyUrl || DEFAULT_TWSE_MIS_PROXY_URL);
+      if (rows.sourceRuntime) recordSourceRuntime(source, rows.sourceRuntime);
       const hasNewTradeTime = twseMisRowsHaveNewTradeTime(rows, twseMisLatestTradeTimeRef.current);
       const timePreview = rows.slice(0, 3).map((row) => `${row.symbol}:${row.tradetime || "-"}`).join(" / ");
 
@@ -4450,14 +5000,33 @@ export default function StockShortV1App() {
         mergeSourceMap(prev, normalizeSourceRowsForValidation(rows, "twse_mis"))
       );
       setStocks((prev) => mergeTwseMisBySymbol(prev, rows));
-      setDataMode("twse_mis_intraday_main_google_aux");
+      setDataMode("twse_mis_intraday_main");
+
+      let officialEtfNote = "";
+      const etfSymbolsForOfficialInav = rows.filter((row) => row?.isEtfCandidate || /^00/.test(String(row?.symbol || row?.stock_id || ""))).map((row) => normalizeStockSymbol(row.symbol || row.stock_id)).filter(Boolean);
+      if (etfSymbolsForOfficialInav.length) {
+        const officialResult = await loadOfficialEtfInav(etfSymbolsForOfficialInav, { silent: true, skipCooldown: true, auto });
+        if (officialResult?.ok) officialEtfNote = `；ETF 即時估值同步 ${officialResult.pass}/${officialResult.count} 檔`;
+      }
+
+      try {
+        const index = await fetchTwseMarketIndex(policy.timeoutMs, apiConfig.twseMisProxyUrl || DEFAULT_TWSE_MIS_PROXY_URL);
+        if (index) {
+          setMarketIndex(index);
+          if (index.sourceRuntime) recordSourceRuntime(source, index.sourceRuntime);
+        } else {
+          setMarketIndex((prev) => prev?.price ? { ...prev, stale: true, staleReason: "fetch_unavailable" } : prev);
+        }
+      } catch {
+        setMarketIndex((prev) => prev?.price ? { ...prev, stale: true, staleReason: "fetch_failed" } : prev);
+      }
 
       if (silent) {
-        if (hasNewTradeTime) setApiMessage(`TWSE MIS 自動刷新｜${timePreview || `${rows.length} 檔`}`);
+        if (hasNewTradeTime) setApiMessage(`行情自動刷新｜${timePreview || `${rows.length} 檔`}${officialEtfNote}`);
       } else {
-        setApiMessage(`TWSE MIS 盤中價量成功：${rows.length} 檔；已更新主畫面 price / volume，GoogleFinance 保留輔助比對${timePreview ? `（${timePreview}）` : ""}`);
+        setApiMessage(`盤中價量成功：${rows.length} 檔；已更新主畫面 price / volume${timePreview ? `（${timePreview}）` : ""}${officialEtfNote}`);
       }
-      return { ok: true, count: rows.length, hasNewTradeTime };
+      return { ok: true, count: rows.length, hasNewTradeTime, officialEtfNote };
     } catch (error) {
       if (!silent) setApiMessage(`TWSE MIS 成交量參考失敗：${error.message}`);
       return { ok: false, error: error.message };
@@ -4496,17 +5065,92 @@ export default function StockShortV1App() {
     }
   }
 
+
+  async function loadOfficialEtfInav(symbolOverride = null, options = {}) {
+    const { silent = false, skipCooldown = false, auto = false } = options || {};
+    const source = "official_etf_inav";
+    const policy = getSourcePolicy(source);
+
+    if (!apiConfig.etfInavProxyUrl) {
+      if (!silent) setApiMessage("ETF 即時估值 URL 尚未設定");
+      return { ok: false, skipped: true, reason: "missing_etf_inav_url" };
+    }
+
+    if (!skipCooldown) {
+      const refresh = canRefreshSource(lastFetchMap, source, policy.cooldownMs);
+      if (!refresh.ok) {
+        if (!silent) setApiMessage(`ETF 即時估值冷卻中：${refresh.remainSec} 秒`);
+        return { ok: false, skipped: true, reason: `冷卻 ${refresh.remainSec} 秒` };
+      }
+    }
+
+    if (!silent) {
+      setApiLoading(true);
+      setApiMessage("讀取 ETF 即時估值中...");
+    }
+
+    try {
+      const requestSymbols = Array.isArray(symbolOverride) && symbolOverride.length
+        ? symbolOverride
+        : stocks.filter(isEtfAsset).map((stock) => stock.symbol);
+      const symbols = requestSymbols.map(normalizeStockSymbol).filter(Boolean).join(",");
+      if (!symbols) {
+        if (!silent) setApiMessage("沒有 ETF 需要讀取即時估值");
+        return { ok: true, count: 0, pass: 0 };
+      }
+
+      const baseUrl = apiConfig.etfInavProxyUrl || DEFAULT_ETF_INAV_PROXY_URL;
+      const url = baseUrl.includes("?") ? `${baseUrl}&symbols=${symbols}` : `${baseUrl}?symbols=${symbols}`;
+      const res = await fetchWithTimeout(url, {}, policy.timeoutMs);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const json = await res.json();
+      const list = Array.isArray(json.results) ? json.results : [];
+      const passCount = list.filter((row) => row?.parseStatus === "PASS").length;
+      recordSourceRuntime(source, buildApiSourceRuntime({
+        source,
+        json,
+        dataTime: pickEtfInavDataTime(json, list),
+        count: list.length,
+        pass: passCount,
+      }));
+
+      setValidationMap((prev) => mergeSourceMap(prev, normalizeSourceRowsForValidation(list.map((row) => ({
+        ...row,
+        symbol: normalizeStockSymbol(row.symbol || row.stock_id),
+        stock_id: normalizeStockSymbol(row.symbol || row.stock_id),
+        marketPrice: row.latestPrice,
+        nav: row.referenceNav,
+        etfMarketPrice: row.latestPrice,
+        etfPremiumDiscountPct: row.premiumDiscountPct,
+        etfSourcePage: "official_inav",
+        etfFetchedAt: row.dataTime || row.navDate || "",
+        sourceNote: "ETF 即時估值",
+      })), source)));
+
+      setStocks((prev) => mergeOfficialEtfInavToStocks(prev, list));
+      setLastFetchMap((prev) => markSourceFetched(prev, source));
+      if (!silent) setApiMessage(`ETF 即時估值成功：${passCount}/${list.length} 檔`);
+      return { ok: true, count: list.length, pass: passCount, summary: json.summary };
+    } catch (error) {
+      if (!silent) setApiMessage(`ETF 即時估值失敗：${error.message}`);
+      return { ok: false, error: error.message };
+    } finally {
+      if (!silent) setApiLoading(false);
+    }
+  }
+
   async function loadYahooEtf(symbolOverride = null) {
     const source = "yahoo_etf";
     const policy = getSourcePolicy(source);
     const refresh = canRefreshSource(lastFetchMap, source, policy.cooldownMs);
-    if (!refresh.ok) { setApiMessage(`Yahoo ETF 冷卻中：${refresh.remainSec} 秒`); return { ok: false, skipped: true, reason: `冷卻 ${refresh.remainSec} 秒` }; }
+    if (!refresh.ok) { setApiMessage(`ETF 備援冷卻中：${refresh.remainSec} 秒`); return { ok: false, skipped: true, reason: `冷卻 ${refresh.remainSec} 秒` }; }
     setApiLoading(true);
-    setApiMessage("讀取 Yahoo ETF 輔助資料中...");
+    setApiMessage("讀取 ETF 備援輔助資料中...");
     try {
       const requestSymbols = Array.isArray(symbolOverride) && symbolOverride.length ? symbolOverride : stocks.filter(isEtfAsset).map((stock) => stock.symbol);
       const symbols = requestSymbols.map(normalizeStockSymbol).filter(Boolean).join(",");
-      if (!symbols) { setApiMessage("沒有 ETF 需要讀取 Yahoo ETF 輔助資料"); return { ok: true, count: 0 }; }
+      if (!symbols) { setApiMessage("沒有 ETF 需要讀取 ETF 備援輔助資料"); return { ok: true, count: 0 }; }
       const url = apiConfig.yahooEtfProxyUrl.includes("?") ? `${apiConfig.yahooEtfProxyUrl}&symbols=${symbols}` : `${apiConfig.yahooEtfProxyUrl}?symbols=${symbols}`;
       const res = await fetchWithTimeout(url, {}, policy.timeoutMs);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -4536,10 +5180,10 @@ export default function StockShortV1App() {
       setStocks((prev) => mergeYahooEtfToStocks(prev, list));
       setDataMode("yahoo_etf_auxiliary");
       setLastFetchMap((prev) => markSourceFetched(prev, source));
-      setApiMessage(`Yahoo ETF 輔助資料成功：${list.filter((row) => row?.probeQuality?.extractedAny).length}/${list.length} 檔${yahooOhlcvNote}`);
+      setApiMessage(`ETF 備援輔助資料成功：${list.filter((row) => row?.probeQuality?.extractedAny).length}/${list.length} 檔${yahooOhlcvNote}`);
       return { ok: true, count: list.length, yahooOhlcvCount: yahooOhlcvList.length };
     } catch (error) {
-      setApiMessage(`Yahoo ETF 輔助資料失敗：${error.message}`);
+      setApiMessage(`ETF 備援輔助資料失敗：${error.message}`);
       return { ok: false, error: error.message };
     } finally {
       setApiLoading(false);
@@ -4616,6 +5260,7 @@ export default function StockShortV1App() {
     const market = canRun("finmind_market");
     const derivatives = canRun("finmind_derivatives");
     const yahoo = canRun("yahoo_ohlcv");
+    const officialEtf = canRun("official_etf_inav");
     const yahooEtf = canRun("yahoo_etf");
 
     try {
@@ -4671,11 +5316,11 @@ export default function StockShortV1App() {
       }
 
       const etfSymbols = refreshSymbols.filter((symbol) => stocks.some((stock) => normalizeStockSymbol(stock.symbol) === symbol && isEtfAsset(stock)));
-      if (apiConfig.yahooEtfProxyUrl && yahooEtf.refresh.ok && etfSymbols.length) {
-        const yahooEtfResult = await loadYahooEtf(etfSymbols);
-        summary.push(yahooEtfResult?.ok ? `Yahoo ETF 輔助已更新 ${yahooEtfResult.count || 0} 檔` : `Yahoo ETF 未更新：${yahooEtfResult?.error || yahooEtfResult?.reason || "無法取得"}`);
-      } else if (apiConfig.yahooEtfProxyUrl && etfSymbols.length) {
-        summary.push(`Yahoo ETF 冷卻 ${yahooEtf.refresh.remainSec} 秒`);
+      if (apiConfig.etfInavProxyUrl && officialEtf.refresh.ok && etfSymbols.length) {
+        const officialEtfResult = await loadOfficialEtfInav(etfSymbols);
+        summary.push(officialEtfResult?.ok ? `ETF 即時估值已更新 ${officialEtfResult.pass || 0}/${officialEtfResult.count || 0} 檔` : `ETF 即時估值未更新：${officialEtfResult?.error || officialEtfResult?.reason || "無法取得"}`);
+      } else if (apiConfig.etfInavProxyUrl && etfSymbols.length) {
+        summary.push(`ETF 即時估值冷卻 ${officialEtf.refresh.remainSec} 秒`);
       }
 
       setApiMessage(summary.length ? summary.join("｜") : "沒有可更新的來源");
@@ -4688,14 +5333,14 @@ export default function StockShortV1App() {
     <div className="min-h-screen bg-slate-50 p-3 text-[15px] text-slate-900"><div className="mx-auto max-w-7xl space-y-3">
       <div><h1 className="text-3xl font-bold tracking-tight">股票短中長分析 App — V1</h1><p className="text-[15px] text-slate-500 mt-1">先做全部股票 / ETF 總覽，再點進單檔細節。短線 V1 維持原三大面向，並加入停損閘門；中線與長線公式尚未啟用。</p></div>
       <AddAssetForm value={newAsset} onChange={setNewAsset} onAdd={addAsset} error={addError} />
-      <OverviewTable rows={overviewRows} selected={selected} onSelect={setSelected} onInsight={(symbol, horizon) => { setSelected(symbol); setInsightTarget({ symbol, horizon }); }} onRemove={removeAsset} dataMode={dataMode} />
+      <OverviewTable rows={overviewRows} selected={selected} onSelect={setSelected} onInsight={(symbol, horizon) => { setSelected(symbol); setInsightTarget({ symbol, horizon }); }} onRemove={removeAsset} dataMode={dataMode} lastFetchMap={lastFetchMap} marketIndex={marketIndex} />
       <InsightPanel insight={activeInsight} />
       <Tabs defaultValue="short" className="space-y-3"><TabsList className="grid w-full grid-cols-5 rounded-xl p-1.5"><TabsTrigger value="short" className="py-2.5">短線V1</TabsTrigger><TabsTrigger value="mid" className="py-2.5">中線V1</TabsTrigger><TabsTrigger value="long" className="py-2.5">長線V1</TabsTrigger><TabsTrigger value="sources" className="py-2.5">資料源</TabsTrigger><TabsTrigger value="validate" className="py-2.5">資料驗證</TabsTrigger></TabsList>
         <TabsContent value="short"><FrameworkTable title="圖片版短線評分表" subtitle={getShortFrameworkSubtitle(current)} result={shortV1} showScore horizon="short" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} stock={current} /><div className="grid gap-3 md:grid-cols-3 mt-3">{getShortDisplayDimensions(shortV1.dimensions, current).map((dim) => <DimensionScoreCard key={dim.dimension} dim={dim} />)}</div></TabsContent>
         <TabsContent value="mid"><FrameworkTable title="中線 V1 架構表" subtitle={getFrameworkAnalysis("中線", midV1)} result={midV1} showScore horizon="mid" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /></TabsContent>
         <TabsContent value="long"><FrameworkTable title="長線 V1 架構表" subtitle={getFrameworkAnalysis("長線", longV1)} result={longV1} showScore horizon="long" onWeightChange={updateWeight} onResetHorizon={resetHorizonWeights} /></TabsContent>
-        <TabsContent value="sources"><div className="space-y-4"><SourceConnectorTable config={apiConfig} onConfigChange={setApiConfig} onSmartRefresh={runSmartRefresh} onLoadGoogle={loadGoogleCsv} onLoadFinMind={loadFinMindProxy} onLoadTwse={loadTwseOpenApi} onLoadTwseMis={loadTwseMisVolume} onLoadMarket={loadFinMindMarket} onLoadDerivatives={loadFinMindDerivatives} onLoadYahoo={loadYahooOhlcv} onLoadYahooEtf={loadYahooEtf} loading={apiLoading} apiMessage={apiMessage} lastFetchMap={lastFetchMap} stocks={stocks} googleDebug={googleDebug} /><Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料來源角色總覽</h3><div className="rounded-lg border bg-slate-50 p-3 text-xs leading-6 text-slate-600"><div className="font-semibold text-slate-900">資料原則</div><div>TWSE MIS 作盤中 price / volume 主參考；GoogleFinance 保留輔助比對與低頻欄位；TWSE OpenAPI 作官方盤後校正；FinMind 作日 K、技術、籌碼與基本面；Yahoo OHLCV / ETF 只作抽樣與 ETF 輔助。</div></div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[130px] py-2">來源</th><th className="w-[170px]">Dataset / API</th><th>主要欄位</th><th>使用方式</th><th className="w-[220px]">角色</th></tr></thead><tbody>{finmindAspectPlan.map((item) => <tr key={item.aspect} className="border-b last:border-0 align-top"><td className="py-2 font-medium">{item.aspect}</td><td className="text-slate-600">{item.datasets}</td><td className="text-slate-600">{item.fields}</td><td className="text-slate-500">{item.calcNote}</td><td className="text-slate-500"><div>短：{item.shortRole}</div><div>中：{item.midRole}</div><div>長：{item.longRole}</div></td></tr>)}</tbody></table></div></CardContent></Card></div></TabsContent>
-        <TabsContent value="validate">{(() => { const validationRows = getSourceValidationRows(selected, current, validationMap); const validationState = getValidationState(validationRows); const groupedRows = validationGroupRows(validationRows); return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料驗證</h3><p className="text-sm text-slate-500 mt-2">即時與歷史資料分區；盤中 price / volume 以 TWSE MIS 為主，GoogleFinance 輔助參考。</p></div><div className="flex flex-wrap gap-2"><Badge className={validationState.tone}>{validationState.label}</Badge><Badge className="bg-slate-100 text-slate-700">通過 {validationState.passed}｜需查 {validationState.failed}｜缺資料 {validationState.missing}</Badge></div></div><div className="rounded-xl bg-white border p-3 text-sm text-slate-700"><span className="font-medium text-slate-900">驗證結論：</span>{validationSummary(validationRows)}</div><div className="max-h-[360px] overflow-y-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1060px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[190px] py-2">項目</th><th className="w-[165px]">主來源</th><th className="w-[115px]">主值</th><th className="w-[135px]">驗證來源</th><th className="w-[115px]">驗證值</th><th className="w-[80px]">偏差</th><th className="w-[80px]">容忍</th><th className="w-[88px]">狀態</th><th>短註</th></tr></thead><tbody>{groupedRows.map(({ group, rows }) => <React.Fragment key={group}><tr className="bg-slate-50"><td colSpan={9} className="px-2 py-2 text-xs font-semibold text-slate-700">{group}</td></tr>{rows.map((row) => <tr key={`${group}-${row.label}`} className="border-b last:border-0 align-top"><td className="py-2 pr-2 font-medium text-slate-900">{row.label}</td><td className="max-w-[165px] pr-2 text-xs text-slate-500">{row.currentSource}</td><td className="pr-2">{displayValue(row.finmindValue)}</td><td className="max-w-[135px] pr-2 text-xs text-slate-500">{row.compareSource}</td><td className="pr-2">{displayValue(row.googleValue)}</td><td className="pr-2">{validationDiffText(row)}</td><td className="pr-2">{validationToleranceText(row)}</td><td className="pr-2"><Badge className={validationStatusClass(row.status)}>{row.status}</Badge></td><td className="max-w-[260px] text-xs leading-5 text-slate-500">{compactValidationNote(row)}</td></tr>)}</React.Fragment>)}</tbody></table></div><div className="rounded-xl border bg-slate-50 p-3 text-xs leading-5 text-slate-600">驗證層只檢查資料口徑，不覆蓋主資料、不參與評分。盤中 price / volume 以 TWSE MIS 為主，GoogleFinance 只作輔助參考；歷史與盤後資料需先對齊日期，不同日期不判失敗。Yahoo 只作 OHLCV 抽樣與 ETF 輔助。</div></CardContent></Card>; })()}</TabsContent>
+        <TabsContent value="sources"><div className="space-y-4"><SourceConnectorTable config={apiConfig} onConfigChange={setApiConfig} onSmartRefresh={runSmartRefresh} onLoadGoogle={loadGoogleCsv} onLoadFinMind={loadFinMindProxy} onLoadTwse={loadTwseOpenApi} onLoadTwseMis={loadTwseMisVolume} onLoadMarket={loadFinMindMarket} onLoadDerivatives={loadFinMindDerivatives} onLoadYahoo={loadYahooOhlcv} onLoadYahooEtf={loadYahooEtf} onLoadOfficialEtfInav={loadOfficialEtfInav} loading={apiLoading} apiMessage={apiMessage} lastFetchMap={lastFetchMap} sourceRuntimeMap={sourceRuntimeMap} stocks={stocks} googleDebug={googleDebug} /><Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料來源角色總覽</h3><div className="rounded-lg border bg-slate-50 p-3 text-xs leading-6 text-slate-600"><div className="font-semibold text-slate-900">資料原則</div><div>資料源依即時區、非即時資料區、救援區管理。TWSE MIS / ETF iNAV / GoogleFinance 負責盤中與即時輔助；TWSE OpenAPI / FinMind 負責盤後、技術、籌碼與風險資料；Yahoo OHLCV / ETF 只作備援與抽樣驗證。FinMind Minute 已移除，不再使用。</div></div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[130px] py-2">來源</th><th className="w-[170px]">Dataset / API</th><th>主要欄位</th><th>使用方式</th><th className="w-[220px]">角色</th></tr></thead><tbody>{sourceRoleOverviewGroups.map((group) => <React.Fragment key={group.title}><tr className={`${group.tone} border-b`}><td colSpan={5} className="px-2 py-2 text-xs font-semibold"><div>{group.title}</div><div className="mt-0.5 font-normal">{group.description}</div></td></tr>{group.items.map((item) => <tr key={item.aspect} className="border-b last:border-0 align-top"><td className="py-2 font-medium">{item.aspect}</td><td className="text-slate-600">{item.datasets}</td><td className="text-slate-600">{item.fields}</td><td className="text-slate-500">{item.calcNote}</td><td className="text-slate-500"><div>短：{item.shortRole}</div><div>中：{item.midRole}</div><div>長：{item.longRole}</div></td></tr>)}</React.Fragment>)}</tbody></table></div></CardContent></Card></div></TabsContent>
+        <TabsContent value="validate">{(() => { const validationRows = getSourceValidationRows(selected, current, validationMap); const validationState = getValidationState(validationRows); const groupedRows = validationGroupRows(validationRows); return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料驗證</h3><p className="text-sm text-slate-500 mt-2">即時與歷史資料分區；盤中 price / volume 以 TWSE MIS 為主，GoogleFinance 輔助參考。</p></div><div className="flex flex-wrap gap-2"><Badge className={validationState.tone}>{validationState.label}</Badge><Badge className="bg-slate-100 text-slate-700">通過 {validationState.passed}｜需查 {validationState.failed}｜缺資料 {validationState.missing}</Badge></div></div><div className="rounded-xl bg-white border p-3 text-sm text-slate-700"><span className="font-medium text-slate-900">驗證結論：</span>{validationSummary(validationRows)}</div><div className="max-h-[360px] overflow-y-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[1060px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[190px] py-2">項目</th><th className="w-[165px]">主來源</th><th className="w-[115px]">主值</th><th className="w-[135px]">驗證來源</th><th className="w-[115px]">驗證值</th><th className="w-[80px]">偏差</th><th className="w-[80px]">容忍</th><th className="w-[88px]">狀態</th><th>短註</th></tr></thead><tbody>{groupedRows.map(({ group, rows }) => <React.Fragment key={group}><tr className="bg-slate-50"><td colSpan={9} className="px-2 py-2 text-xs font-semibold text-slate-700">{group}</td></tr>{rows.map((row) => <tr key={`${group}-${row.label}`} className="border-b last:border-0 align-top"><td className="py-2 pr-2 font-medium text-slate-900">{row.label}</td><td className="max-w-[165px] pr-2 text-xs text-slate-500">{row.currentSource}</td><td className="pr-2">{displayValue(row.finmindValue)}</td><td className="max-w-[135px] pr-2 text-xs text-slate-500">{row.compareSource}</td><td className="pr-2">{displayValue(row.googleValue)}</td><td className="pr-2">{validationDiffText(row)}</td><td className="pr-2">{validationToleranceText(row)}</td><td className="pr-2"><Badge className={validationStatusClass(row.status)}>{row.status}</Badge></td><td className="max-w-[260px] text-xs leading-5 text-slate-500">{compactValidationNote(row)}</td></tr>)}</React.Fragment>)}</tbody></table></div><div className="rounded-xl border bg-slate-50 p-3 text-xs leading-5 text-slate-600">驗證層只檢查資料口徑，不覆蓋主資料、不參與評分。盤中 price / volume 以 TWSE MIS 為主；ETF 折溢價以即時估值欄位作輔助判斷。歷史與盤後資料需先對齊日期，不同日期不判失敗。</div></CardContent></Card>; })()}</TabsContent>
       </Tabs>
     </div></div>
   );

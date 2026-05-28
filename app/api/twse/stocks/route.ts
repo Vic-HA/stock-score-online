@@ -1,7 +1,24 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02_NONREALTIME_AND_GOOGLE_50_LIMIT";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 export const revalidate = 0;
 
 const STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
@@ -196,7 +213,7 @@ async function fetchJson(url) {
   return res.json();
 }
 
-export async function GET(request) {
+async function uncachedGET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const requestedSymbols = parseList(searchParams.get("symbols"));
@@ -260,3 +277,54 @@ export async function GET(request) {
     );
   }
 }
+
+
+export async function GET(request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheKey = buildRouteCacheKey("twse_stocks", request.url);
+
+  try {
+    const cached = await getOrFetchScheduledDailyCached({
+      key: cacheKey,
+      force,
+      meta: { route: "/api/twse/stocks", policy: "TWSE OpenAPI scheduled cache" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "scheduled_daily",
+          schedule: "08:30 / 14:10 / 15:30 / 18:00 / 22:00 Asia/Taipei",
+          force,
+          route: "/api/twse/stocks",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/twse/stocks",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "scheduled_daily", force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+
