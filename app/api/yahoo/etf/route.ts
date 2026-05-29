@@ -3,7 +3,7 @@ import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCach
 
 export const dynamic = "force-dynamic";
 
-const CACHE_BUILD_VERSION = "CACHE_BUILD_02_NONREALTIME_AND_GOOGLE_50_LIMIT";
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02D_YAHOO_ETF_DATA_TIME_HELPER_FIX";
 
 function buildRouteCacheKey(prefix: string, requestUrl: string) {
   const url = new URL(requestUrl);
@@ -35,6 +35,12 @@ type YahooEtfRow = {
   premiumDiscountPct: number | null;
   refUrl: string;
   fetchedAt: string;
+  dataTime?: {
+    quoteDate: string | null;
+    sourceTimeText: string | null;
+    confidence: "low" | "medium" | "high";
+    note: string;
+  };
   probeQuality: {
     matched: boolean;
     extractedAny: boolean;
@@ -71,7 +77,7 @@ function parseSymbols(input: string | null): string[] {
         .filter(Boolean)
         .map((s) => s.replace(/\.(TW|TWO)$/i, "").padStart(4, "0"))
     )
-  );
+  ).slice(0, 50);
 }
 
 function decodeHtml(input: string): string {
@@ -106,6 +112,15 @@ function toNumber(value: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function makeYahooEtfDataTime(sourceTimeText: string | null = null) {
+  return {
+    quoteDate: null,
+    sourceTimeText,
+    confidence: "low" as const,
+    note: "Yahoo ETF page does not expose a reliable structured quote date/time in this parser; this is source time text only when available, not fetch/cache timestamp.",
+  };
+}
+
 function buildEmptyRow(symbol: string, fetchedAt: string): YahooEtfRow {
   return {
     symbol,
@@ -123,6 +138,7 @@ function buildEmptyRow(symbol: string, fetchedAt: string): YahooEtfRow {
     premiumDiscountPct: null,
     refUrl: "",
     fetchedAt,
+    dataTime: makeYahooEtfDataTime(null),
     probeQuality: {
       matched: false,
       extractedAny: false,
@@ -192,6 +208,7 @@ function extractRowFromText(
     premiumDiscountPct: toNumber(premiumRaw),
     refUrl,
     fetchedAt,
+    dataTime: makeYahooEtfDataTime(null),
     probeQuality: {
       matched: true,
       extractedAny: true,
@@ -260,6 +277,16 @@ async function fetchText(url: string): Promise<{ text: string; status: FetchStat
   }
 }
 
+
+function buildYahooEtfDataTimeSummary(etfs: YahooEtfRow[]) {
+  const rows = Array.isArray(etfs) ? etfs : [];
+  return {
+    symbolsWithExplicitQuoteTime: rows.filter((row) => row.dataTime?.quoteDate || row.dataTime?.sourceTimeText).length,
+    confidence: "low",
+    note: "Yahoo ETF route is a backup parser. It does not expose reliable structured source data time yet; do not use fetchedAt/cache time as quote time.",
+  };
+}
+
 async function uncachedGET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const symbols = parseSymbols(searchParams.get("symbols"));
@@ -306,6 +333,7 @@ async function uncachedGET(req: NextRequest) {
     route: "/api/yahoo/etf",
     requestedSymbols: symbols,
     count: validEtfs.length,
+    dataTimeSummary: buildYahooEtfDataTimeSummary(etfs),
     etfs,
     rawDataMap,
     missingSymbols,
@@ -331,7 +359,7 @@ export async function GET(req: NextRequest) {
   const wrapperStartedAt = new Date().toISOString();
   const url = new URL(req.url);
   const force = isForceRefresh(url.searchParams);
-  const cacheKey = buildRouteCacheKey("yahoo_etf", req.url);
+  const cacheKey = buildRouteCacheKey("yahoo_etf_v02d", req.url);
 
   try {
     const cached = await getOrFetchScheduledDailyCached({

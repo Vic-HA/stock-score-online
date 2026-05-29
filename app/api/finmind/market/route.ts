@@ -4,7 +4,7 @@ import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache"
 
 export const dynamic = "force-dynamic";
 
-const CACHE_BUILD_VERSION = "CACHE_BUILD_02_NONREALTIME_AND_GOOGLE_50_LIMIT";
+const CACHE_BUILD_VERSION = "CACHE_BUILD_03_FINMIND_MARKET_DATA_TIME";
 
 function buildRouteCacheKey(prefix: string, requestUrl: string) {
   const url = new URL(requestUrl);
@@ -173,6 +173,24 @@ function normalizeSimpleSeries(dataset: string, id: string, rows: any[], valueKe
   };
 }
 
+
+function buildMarketDataTimeSummary(market: any) {
+  const latest = (rows: any[], key = "updatedAt") => {
+    const dates = (Array.isArray(rows) ? rows : []).map((row) => row?.[key]).filter(Boolean).sort();
+    return dates[dates.length - 1] || null;
+  };
+
+  return {
+    latestUsMarketDate: latest(market?.us || []),
+    latestFxDate: latest(market?.fx || []),
+    latestBondDate: latest(market?.bonds || []),
+    latestOilDate: latest(market?.oil || []),
+    goldDate: market?.gold?.updatedAt || null,
+    fedRateDate: market?.fedRate?.updatedAt || null,
+    note: "FinMind Market source data dates, not fetch/cache timestamps.",
+  };
+}
+
 async function uncachedGET(request: Request) {
   const { token, tokenSource } = getRequestToken(request);
 
@@ -262,28 +280,30 @@ async function uncachedGET(request: Request) {
     error: fedRateResult.error,
   };
 
-  const byId = Object.fromEntries(usMarket.map((item) => [item.id, item]));
+const byId = Object.fromEntries(usMarket.map((item) => [item.id, item]));
   const includeDebug = searchParams.get("debug") === "1";
+  const marketPayload = {
+    us: usMarket.map((item: any) => includeDebug ? item : ({ ...item, debug: undefined })),
+    fx,
+    bonds,
+    oil,
+    gold,
+    fedRate,
+    derived: {
+      nasdaqReturn1d: byId["^IXIC"]?.return1d ?? null,
+      soxReturn1d: byId["^SOX"]?.return1d ?? null,
+      sp500Return1d: byId["^GSPC"]?.return1d ?? null,
+      dowReturn1d: byId["^DJI"]?.return1d ?? null,
+      vixChange1d: byId["^VIX"]?.return1d ?? null,
+    },
+  };
 
   return NextResponse.json({
     ok: true,
     source: "finmind_market_proxy",
     tokenSource,
-    market: {
-      us: usMarket.map((item: any) => includeDebug ? item : ({ ...item, debug: undefined })),
-      fx,
-      bonds,
-      oil,
-      gold,
-      fedRate,
-      derived: {
-        nasdaqReturn1d: byId["^IXIC"]?.return1d ?? null,
-        soxReturn1d: byId["^SOX"]?.return1d ?? null,
-        sp500Return1d: byId["^GSPC"]?.return1d ?? null,
-        dowReturn1d: byId["^DJI"]?.return1d ?? null,
-        vixChange1d: byId["^VIX"]?.return1d ?? null,
-      },
-    },
+    dataTimeSummary: buildMarketDataTimeSummary(marketPayload),
+    market: marketPayload,
     vixDebug: includeDebug ? byId["^VIX"]?.debug || null : undefined,
     fetchedAt: new Date().toISOString(),
     requestCostHint: {
@@ -299,7 +319,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const force = isForceRefresh(url.searchParams);
   const cacheTtlMs = parseTtlMs(url.searchParams, 60 * 60 * 1000);
-  const cacheKey = buildRouteCacheKey("finmind_market", request.url);
+  const cacheKey = buildRouteCacheKey("finmind_market_v03", request.url);
 
   try {
     const cached = await getOrFetchCached({

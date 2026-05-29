@@ -4,7 +4,7 @@ import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache"
 
 export const dynamic = "force-dynamic";
 
-const CACHE_BUILD_VERSION = "CACHE_BUILD_02D_FINMIND_STALE_IF_ERROR";
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02F_FINMIND_PROFILE_DATA_TIME";
 
 function buildRouteCacheKey(prefix: string, requestUrl: string) {
   const url = new URL(requestUrl);
@@ -20,12 +20,16 @@ function buildRouteCacheKey(prefix: string, requestUrl: string) {
 
 const globalFinMindStocksStale = globalThis as typeof globalThis & {
   __finmindStocksLastGoodCache?: Map<string, any>;
+  __finmindStocksLastGoodFullBySymbol?: Map<string, any>;
 };
 
 const finmindStocksLastGoodStore =
   globalFinMindStocksStale.__finmindStocksLastGoodCache || new Map<string, any>();
+const finmindStocksLastGoodFullBySymbol =
+  globalFinMindStocksStale.__finmindStocksLastGoodFullBySymbol || new Map<string, any>();
 
 globalFinMindStocksStale.__finmindStocksLastGoodCache = finmindStocksLastGoodStore;
+globalFinMindStocksStale.__finmindStocksLastGoodFullBySymbol = finmindStocksLastGoodFullBySymbol;
 
 function makeStaleCacheMeta(key: string, entry: any, ttlMs: number, upstreamError: any) {
   const now = Date.now();
@@ -57,6 +61,288 @@ function saveFinMindStocksLastGood(key: string, payload: any, quality: any) {
 
 function getFinMindStocksLastGood(key: string) {
   return finmindStocksLastGoodStore.get(key) || null;
+}
+
+
+
+function normalizeFinMindProfile(value: string | null) {
+  const raw = String(value || "full").trim().toLowerCase();
+  if (raw === "score" || raw === "short" || raw === "short_score") return "score";
+  if (raw === "fundamental" || raw === "fundamentals" || raw === "long") return "fundamental";
+  return "full";
+}
+
+const FINMIND_PROFILE_DATASETS: Record<string, string[]> = {
+  full: [
+    "TaiwanStockPrice",
+    "TaiwanStockPER",
+    "TaiwanStockInstitutionalInvestorsBuySell",
+    "TaiwanStockMarginPurchaseShortSale",
+    "TaiwanStockMonthRevenue",
+    "TaiwanStockFinancialStatements",
+    "TaiwanStockBalanceSheet",
+  ],
+  score: [
+    "TaiwanStockPrice",
+    "TaiwanStockInstitutionalInvestorsBuySell",
+    "TaiwanStockMarginPurchaseShortSale",
+  ],
+  fundamental: [
+    "TaiwanStockMonthRevenue",
+    "TaiwanStockFinancialStatements",
+    "TaiwanStockBalanceSheet",
+  ],
+};
+
+function makeSkippedResult(dataset: string, profile: string) {
+  return {
+    ok: false,
+    data: [],
+    error: `SKIPPED_BY_PROFILE:${profile}:${dataset}`,
+  };
+}
+
+function getLastGoodFullStock(symbol: string) {
+  return finmindStocksLastGoodFullBySymbol.get(String(symbol || "").toUpperCase()) || null;
+}
+
+function saveLastGoodFullStock(stock: any) {
+  const symbol = String(stock?.symbol || stock?.stock_id || "").toUpperCase();
+  if (!symbol) return;
+  finmindStocksLastGoodFullBySymbol.set(symbol, {
+    ...stock,
+    lastGoodFullSavedAt: new Date().toISOString(),
+  });
+}
+
+function saveLastGoodFullPayload(payload: any) {
+  const stocks = Array.isArray(payload?.stocks) ? payload.stocks : [];
+  stocks.forEach(saveLastGoodFullStock);
+}
+
+const SCORE_FIELD_KEYS = [
+  "dailyClose", "dailyOpen", "dailyHigh", "dailyLow", "dailyPrevClose", "dailyVolume",
+  "high20", "low20", "avgVolume20", "ma5", "ma20", "ma60", "rsi14", "return20d", "return60d",
+  "priceRowCount", "technicalWarmupStatus",
+  "macd", "macdSignal", "macdHist", "macdHistPrev1", "macdHistPrev3", "macdHistDelta3", "macdHistTrend3", "macdState", "macdWarmupReady",
+  "k9", "d9", "j9", "k9Prev1", "d9Prev1", "kdDiff", "kdDiffPrev1", "kdDiffTrend3", "kdCross", "kdState", "kdWarmupReady",
+  "atr14", "atrPct", "atrPctAvg20", "atrPctVsAvg20", "volatilityState", "atrWarmupReady",
+  "institutionalUpdatedAt", "foreign3d", "trust3d", "dealer3d", "institutional3d", "foreign20d", "trust20d", "dealer20d", "institutional20d",
+  "marginUpdatedAt", "marginPurchaseBuy", "marginPurchaseSell", "marginPurchaseTodayBalance", "marginPurchaseYesterdayBalance", "marginChange5dPct", "marginChange20dPct",
+  "shortSaleBuy", "shortSaleSell", "shortSaleTodayBalance", "shortSaleYesterdayBalance", "shortSaleChange5dPct", "shortSaleChange20dPct",
+];
+
+const FUNDAMENTAL_FIELD_KEYS = [
+  "revenueUpdatedAt", "revenueLatest", "revenueMonth", "revenueYear", "revenueMoM", "revenueYoY",
+  "financialUpdatedAt", "financialQuarterCount", "eps", "epsTtm", "epsGrowthYoY", "epsTtmGrowthYoY",
+  "grossProfit", "operatingIncome", "financialRevenue", "incomeAfterTaxes", "incomeAfterTaxesTtm",
+  "grossMargin", "grossMarginQoQ", "operatingMargin", "operatingMarginQoQ", "netMargin", "netMarginQoQ",
+  "balanceUpdatedAt", "totalAssets", "totalLiabilities", "equity", "debtRatio", "roeTtm", "roe",
+];
+
+const VALUATION_FIELD_KEYS = ["per", "pbr", "dividendYield"];
+
+function copyFieldsFromLastGood(target: any, lastGood: any, keys: string[]) {
+  keys.forEach((key) => {
+    if (lastGood && lastGood[key] !== undefined && lastGood[key] !== null) {
+      target[key] = lastGood[key];
+    }
+  });
+}
+
+
+function latestDateFromRows(rows: any[], dateKeys = ["date", "Date"]) {
+  const dates = (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      for (const key of dateKeys) {
+        const value = row?.[key];
+        if (value !== null && value !== undefined && String(value).trim()) return String(value).trim();
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .sort();
+
+  return dates[dates.length - 1] || null;
+}
+
+function normalizeYearMonthFromDate(value: any) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const dash = raw.match(/^(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?$/);
+  if (dash) return `${dash[1]}-${String(dash[2]).padStart(2, "0")}`;
+
+  const compact = raw.match(/^(\d{4})(\d{2})(?:\d{2})?$/);
+  if (compact) return `${compact[1]}-${compact[2]}`;
+
+  return raw;
+}
+
+function quarterFromDate(value: any) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const dash = raw.match(/^(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?$/);
+  if (dash) {
+    const month = Number(dash[2]);
+    if (Number.isFinite(month) && month > 0) return `${dash[1]}Q${Math.ceil(month / 3)}`;
+  }
+
+  const compact = raw.match(/^(\d{4})(\d{2})(?:\d{2})?$/);
+  if (compact) {
+    const month = Number(compact[2]);
+    if (Number.isFinite(month) && month > 0) return `${compact[1]}Q${Math.ceil(month / 3)}`;
+  }
+
+  return raw;
+}
+
+function latestRevenueMonth(rows: any[]) {
+  const sorted = latestRowsByDate(rows);
+  const latest = sorted[sorted.length - 1] || {};
+  if (latest?.revenue_year && latest?.revenue_month) {
+    return `${latest.revenue_year}-${String(latest.revenue_month).padStart(2, "0")}`;
+  }
+
+  return normalizeYearMonthFromDate(latestDateFromRows(sorted));
+}
+
+function latestQuarterMeta(rows: any[]) {
+  const latest = latestDateFromRows(rows);
+  return {
+    date: latest,
+    quarter: quarterFromDate(latest),
+  };
+}
+
+function mergeDataTimeWithLastGood(current: any, lastGoodFullStock: any) {
+  const previous = lastGoodFullStock?.dataTime || {};
+  return {
+    priceDate: current.priceDate || previous.priceDate || null,
+    institutionalDate: current.institutionalDate || previous.institutionalDate || null,
+    marginDate: current.marginDate || previous.marginDate || null,
+    perDate: current.perDate || previous.perDate || null,
+    revenueMonth: current.revenueMonth || previous.revenueMonth || null,
+    financialDate: current.financialDate || previous.financialDate || null,
+    financialQuarter: current.financialQuarter || previous.financialQuarter || null,
+    balanceDate: current.balanceDate || previous.balanceDate || null,
+    balanceQuarter: current.balanceQuarter || previous.balanceQuarter || null,
+  };
+}
+
+function buildFinMindDataTimeFromRows({
+  priceRows,
+  perRows,
+  institutionalRows,
+  marginRows,
+  revenueRows,
+  financialRows,
+  balanceRows,
+  lastGoodFullStock,
+}: {
+  priceRows: any[];
+  perRows: any[];
+  institutionalRows: any[];
+  marginRows: any[];
+  revenueRows: any[];
+  financialRows: any[];
+  balanceRows: any[];
+  lastGoodFullStock?: any;
+}) {
+  const financial = latestQuarterMeta(financialRows);
+  const balance = latestQuarterMeta(balanceRows);
+
+  return mergeDataTimeWithLastGood(
+    {
+      priceDate: latestDateFromRows(priceRows),
+      institutionalDate: latestDateFromRows(institutionalRows),
+      marginDate: latestDateFromRows(marginRows),
+      perDate: latestDateFromRows(perRows),
+      revenueMonth: latestRevenueMonth(revenueRows),
+      financialDate: financial.date,
+      financialQuarter: financial.quarter,
+      balanceDate: balance.date,
+      balanceQuarter: balance.quarter,
+    },
+    lastGoodFullStock
+  );
+}
+
+function buildProfileDataTime(dataTime: any) {
+  const scoreDates = [
+    dataTime?.priceDate,
+    dataTime?.institutionalDate,
+    dataTime?.marginDate,
+  ].filter(Boolean).sort();
+
+  return {
+    score: scoreDates[scoreDates.length - 1] || null,
+    fundamental: [dataTime?.revenueMonth, dataTime?.financialQuarter, dataTime?.balanceQuarter]
+      .filter(Boolean)
+      .join(" / ") || null,
+  };
+}
+
+function buildDataFreshness(profile: string, stock: any) {
+  const normalized = normalizeFinMindProfile(profile);
+  let note = "Full profile updated score and fundamental datasets. Times shown are data dates, not fetch/cache time.";
+
+  if (normalized === "score") {
+    note = stock?.staleFundamental
+      ? "Score datasets were refreshed; fundamental fields are carried forward from lastGoodFull. Times shown are data dates, not fetch/cache time."
+      : "Score datasets were refreshed. Times shown are data dates, not fetch/cache time.";
+  } else if (normalized === "fundamental") {
+    note = stock?.staleScore
+      ? "Fundamental datasets were refreshed; score fields are carried forward from lastGoodFull. Times shown are data dates, not fetch/cache time."
+      : "Fundamental datasets were refreshed. Times shown are data dates, not fetch/cache time.";
+  }
+
+  return {
+    profile: normalized,
+    staleScore: Boolean(stock?.staleScore),
+    staleFundamental: Boolean(stock?.staleFundamental),
+    mergedFromLastGoodFull: Boolean(stock?.mergedFromLastGoodFull),
+    note,
+  };
+}
+
+
+function mergeProfileStockWithLastGood(stock: any, profile: string) {
+  const normalized = normalizeFinMindProfile(profile);
+  const lastGood = getLastGoodFullStock(stock?.symbol || stock?.stock_id);
+  const merged = { ...stock };
+
+  if (normalized === "full") {
+    merged.staleFundamental = false;
+    merged.staleScore = false;
+    merged.mergedFromLastGoodFull = false;
+    return merged;
+  }
+
+  if (!lastGood) {
+    merged.mergedFromLastGoodFull = false;
+    merged.profileMergeWarning = "NO_LAST_GOOD_FULL_AVAILABLE";
+    if (normalized === "score") merged.staleFundamental = true;
+    if (normalized === "fundamental") merged.staleScore = true;
+    return merged;
+  }
+
+  if (normalized === "score") {
+    copyFieldsFromLastGood(merged, lastGood, [...FUNDAMENTAL_FIELD_KEYS, ...VALUATION_FIELD_KEYS]);
+    merged.staleFundamental = true;
+    merged.staleScore = false;
+  }
+
+  if (normalized === "fundamental") {
+    copyFieldsFromLastGood(merged, lastGood, [...SCORE_FIELD_KEYS, ...VALUATION_FIELD_KEYS]);
+    merged.staleFundamental = false;
+    merged.staleScore = true;
+  }
+
+  merged.mergedFromLastGoodFull = true;
+  merged.lastGoodFullUpdatedAt = lastGood.updatedAt || lastGood.lastGoodFullSavedAt || null;
+  return merged;
 }
 
 
@@ -843,7 +1129,7 @@ function summarizeBalanceRows(rows: any[]) {
   };
 }
 
-async function buildStock(symbol: string, token: string) {
+async function buildStock(symbol: string, token: string, profile = "full") {
   const endDate = yyyyMmDd(new Date());
 
   const startPrice = daysAgo(300);
@@ -852,6 +1138,10 @@ async function buildStock(symbol: string, token: string) {
   const startMargin = daysAgo(45);
   const startRevenue = daysAgo(500);
   const startFinancial = daysAgo(1200);
+
+  const normalizedProfile = normalizeFinMindProfile(profile);
+  const profileDatasets = new Set(FINMIND_PROFILE_DATASETS[normalizedProfile] || FINMIND_PROFILE_DATASETS.full);
+  const wants = (dataset: string) => profileDatasets.has(dataset);
 
   const [
     priceResult,
@@ -862,41 +1152,55 @@ async function buildStock(symbol: string, token: string) {
     financialResult,
     balanceResult,
   ] = await Promise.all([
-    fetchFinMindSafe(
-      "TaiwanStockPrice",
-      { data_id: symbol, start_date: startPrice, end_date: endDate },
-      token
-    ),
-    fetchFinMindSafe(
-      "TaiwanStockPER",
-      { data_id: symbol, start_date: startPer, end_date: endDate },
-      token
-    ),
-    fetchFinMindSafe(
-      "TaiwanStockInstitutionalInvestorsBuySell",
-      { data_id: symbol, start_date: startChip, end_date: endDate },
-      token
-    ),
-    fetchFinMindSafe(
-      "TaiwanStockMarginPurchaseShortSale",
-      { data_id: symbol, start_date: startMargin, end_date: endDate },
-      token
-    ),
-    fetchFinMindSafe(
-      "TaiwanStockMonthRevenue",
-      { data_id: symbol, start_date: startRevenue, end_date: endDate },
-      token
-    ),
-    fetchFinMindSafe(
-      "TaiwanStockFinancialStatements",
-      { data_id: symbol, start_date: startFinancial, end_date: endDate },
-      token
-    ),
-    fetchFinMindSafe(
-      "TaiwanStockBalanceSheet",
-      { data_id: symbol, start_date: startFinancial, end_date: endDate },
-      token
-    ),
+    wants("TaiwanStockPrice")
+      ? fetchFinMindSafe(
+          "TaiwanStockPrice",
+          { data_id: symbol, start_date: startPrice, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockPrice", normalizedProfile)),
+    wants("TaiwanStockPER")
+      ? fetchFinMindSafe(
+          "TaiwanStockPER",
+          { data_id: symbol, start_date: startPer, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockPER", normalizedProfile)),
+    wants("TaiwanStockInstitutionalInvestorsBuySell")
+      ? fetchFinMindSafe(
+          "TaiwanStockInstitutionalInvestorsBuySell",
+          { data_id: symbol, start_date: startChip, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockInstitutionalInvestorsBuySell", normalizedProfile)),
+    wants("TaiwanStockMarginPurchaseShortSale")
+      ? fetchFinMindSafe(
+          "TaiwanStockMarginPurchaseShortSale",
+          { data_id: symbol, start_date: startMargin, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockMarginPurchaseShortSale", normalizedProfile)),
+    wants("TaiwanStockMonthRevenue")
+      ? fetchFinMindSafe(
+          "TaiwanStockMonthRevenue",
+          { data_id: symbol, start_date: startRevenue, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockMonthRevenue", normalizedProfile)),
+    wants("TaiwanStockFinancialStatements")
+      ? fetchFinMindSafe(
+          "TaiwanStockFinancialStatements",
+          { data_id: symbol, start_date: startFinancial, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockFinancialStatements", normalizedProfile)),
+    wants("TaiwanStockBalanceSheet")
+      ? fetchFinMindSafe(
+          "TaiwanStockBalanceSheet",
+          { data_id: symbol, start_date: startFinancial, end_date: endDate },
+          token
+        )
+      : Promise.resolve(makeSkippedResult("TaiwanStockBalanceSheet", normalizedProfile)),
   ]);
 
   const priceRows = priceResult.data;
@@ -970,9 +1274,26 @@ async function buildStock(symbol: string, token: string) {
     TaiwanStockBalanceSheet: balanceResult.error,
   };
 
-  return {
+  const lastGoodFullStock = getLastGoodFullStock(symbol);
+  const dataTime = buildFinMindDataTimeFromRows({
+    priceRows,
+    perRows,
+    institutionalRows,
+    marginRows,
+    revenueRows,
+    financialRows,
+    balanceRows,
+    lastGoodFullStock,
+  });
+
+  const stock = {
     symbol,
     stock_id: symbol,
+    finmindProfile: normalizedProfile,
+    requestedDatasets: Array.from(profileDatasets),
+    dataTime,
+    profileDataTime: buildProfileDataTime(dataTime),
+    dataFreshness: null,
 
     // Daily 技術 / 歷史序列欄位。不回傳 price，避免覆蓋 GoogleFinance 較新行情。
     dailyClose,
@@ -1049,7 +1370,7 @@ async function buildStock(symbol: string, token: string) {
     roe: roeTtm,
 
     updatedAt: latestPrice?.date || endDate,
-    sourceNote: "FinMind enriched: Price/PER/Institutional/Margin/Revenue/Financial/Balance/ROE+TTM + App technical indicators",
+    sourceNote: `FinMind enriched profile=${normalizedProfile}: ${Array.from(profileDatasets).join("/")} + profile merge`,
     datasetStatus: {
       TaiwanStockPrice: priceResult.ok,
       TaiwanStockPER: perResult.ok,
@@ -1070,7 +1391,37 @@ async function buildStock(symbol: string, token: string) {
       TaiwanStockBalanceSheet: balanceRows.length,
     },
   };
+
+  const merged = mergeProfileStockWithLastGood(stock, normalizedProfile);
+  merged.profileDataTime = buildProfileDataTime(merged.dataTime);
+  merged.dataFreshness = buildDataFreshness(normalizedProfile, merged);
+
+  if (normalizedProfile === "full") saveLastGoodFullStock(merged);
+  return merged;
 }
+
+
+function buildProfileDataSummary(stocks: any[], profile: string) {
+  const dataTimes = (Array.isArray(stocks) ? stocks : []).map((stock) => stock?.dataTime || {});
+  const latest = (key: string) => {
+    const values = dataTimes.map((x) => x?.[key]).filter(Boolean).sort();
+    return values[values.length - 1] || null;
+  };
+
+  return {
+    profile: normalizeFinMindProfile(profile),
+    symbols: Array.isArray(stocks) ? stocks.length : 0,
+    latestPriceDate: latest("priceDate"),
+    latestInstitutionalDate: latest("institutionalDate"),
+    latestMarginDate: latest("marginDate"),
+    latestPerDate: latest("perDate"),
+    latestRevenueMonth: latest("revenueMonth"),
+    latestFinancialQuarter: latest("financialQuarter"),
+    latestBalanceQuarter: latest("balanceQuarter"),
+    note: "All values are source data dates/months/quarters, not fetch/cache timestamps.",
+  };
+}
+
 
 async function uncachedGET(request: Request) {
   const { token, tokenSource } = getRequestToken(request);
@@ -1082,15 +1433,17 @@ async function uncachedGET(request: Request) {
         message:
           "Missing FinMind token. Set FINMIND_TOKEN in .env.local or send X-FinMind-Token header.",
       },
-      { status: error?.status && error.status >= 400 ? error.status : 502 }
+      { status: 401 }
     );
   }
 
   const { searchParams } = new URL(request.url);
   const symbols = parseSymbols(searchParams.get("symbols"));
+  const profile = normalizeFinMindProfile(searchParams.get("profile"));
+  const profileDatasets = FINMIND_PROFILE_DATASETS[profile] || FINMIND_PROFILE_DATASETS.full;
 
   const results = await Promise.allSettled(
-    symbols.map((symbol) => buildStock(symbol, token))
+    symbols.map((symbol) => buildStock(symbol, token, profile))
   );
 
   const stocks = results
@@ -1131,13 +1484,24 @@ async function uncachedGET(request: Request) {
     source: "finmind_enriched_proxy",
     tokenSource,
     requestedSymbols: symbols,
+    profile,
+    profileDatasets,
     count: stocks.length,
+    profileDataSummary: buildProfileDataSummary(stocks, profile),
     stocks,
     errors,
     fetchedAt: new Date().toISOString(),
     requestCostHint: {
-      datasetsPerSymbol: 7,
-      note: "This route intentionally enriches FinMind fields. MACD/KD/ATR are calculated from TaiwanStockPrice locally with 300 calendar-day warm-up and add no extra FinMind request. For 50 symbols it may use about 350 FinMind requests per manual refresh. With FinMind Market + Derivatives hourly cache, a 50-symbol list is about 369 requests/hour, below a 600 requests/hour free-token budget.",
+      profile,
+      datasetsPerSymbol: profileDatasets.length,
+      estimatedRequests: symbols.length * profileDatasets.length,
+      datasets: profileDatasets,
+      note:
+        profile === "full"
+          ? "Full profile fetches all 7 FinMind datasets and updates lastGoodFull for later partial-refresh merge."
+          : profile === "score"
+            ? "Score profile fetches Price + Institutional + Margin only. Fundamental/valuation fields are merged from lastGoodFull when available."
+            : "Fundamental profile fetches MonthRevenue + FinancialStatements + BalanceSheet only. Score fields are merged from lastGoodFull when available.",
     },
   });
 }
@@ -1203,7 +1567,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const force = isForceRefresh(url.searchParams);
   const cacheTtlMs = parseTtlMs(url.searchParams, 60 * 60 * 1000);
-  const cacheKey = buildRouteCacheKey("finmind_stocks_stale_v02d", request.url);
+  const cacheKey = buildRouteCacheKey("finmind_stocks_profile_v02f", request.url);
 
   try {
     const cached = await getOrFetchCached({
@@ -1232,6 +1596,7 @@ export async function GET(request: Request) {
         };
 
         saveFinMindStocksLastGood(cacheKey, guardedPayload, quality);
+        if (guardedPayload.profile === "full") saveLastGoodFullPayload(guardedPayload);
 
         return {
           payload: guardedPayload,
@@ -1240,13 +1605,16 @@ export async function GET(request: Request) {
       },
     });
 
+    if (cached.value?.payload?.profile === "full") saveLastGoodFullPayload(cached.value.payload);
+
     return NextResponse.json(
       {
         ...cached.value.payload,
         cache: cached.cache,
         cachePolicy: {
           build: CACHE_BUILD_VERSION,
-          kind: "ttl",
+          kind: "ttl_profile_merge",
+          profile: cached.value?.payload?.profile || normalizeFinMindProfile(url.searchParams.get("profile")),
           ttlMs: cacheTtlMs,
           force,
           route: "/api/finmind/stocks",
@@ -1270,7 +1638,8 @@ export async function GET(request: Request) {
           cache: makeStaleCacheMeta(cacheKey, lastGood, cacheTtlMs, error),
           cachePolicy: {
             build: CACHE_BUILD_VERSION,
-            kind: "ttl_stale_if_error",
+            kind: "ttl_stale_if_error_profile_merge",
+            profile: normalizeFinMindProfile(url.searchParams.get("profile")),
             ttlMs: cacheTtlMs,
             force,
             route: "/api/finmind/stocks",
@@ -1306,7 +1675,8 @@ export async function GET(request: Request) {
         route: "/api/finmind/stocks",
         cachePolicy: {
           build: CACHE_BUILD_VERSION,
-          kind: "ttl_stale_if_error",
+          kind: "ttl_stale_if_error_profile_merge",
+          profile: normalizeFinMindProfile(url.searchParams.get("profile")),
           ttlMs: cacheTtlMs,
           force,
           route: "/api/finmind/stocks",

@@ -4,7 +4,7 @@ import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCach
 
 export const dynamic = "force-dynamic";
 
-const CACHE_BUILD_VERSION = "CACHE_BUILD_02_NONREALTIME_AND_GOOGLE_50_LIMIT";
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02C_YAHOO_OHLCV_DATA_TIME";
 
 function buildRouteCacheKey(prefix: string, requestUrl: string) {
   const url = new URL(requestUrl);
@@ -49,7 +49,7 @@ function parseSymbols(input: string | null) {
     .split(",")
     .map((x) => normalizeStockSymbol(x))
     .filter(Boolean)
-    .slice(0, 10);
+    .slice(0, 50);
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -458,11 +458,39 @@ async function fetchYahoo(symbol: string, range: string, interval: string) {
     dailyVolume: latest?.volume ?? null,
     adjClose: latest?.adjClose ?? null,
     updatedAt: latest?.date || "",
+    dataTime: {
+      firstOhlcvDate: sorted[0]?.date || null,
+      latestOhlcvDate: latest?.date || null,
+      rowCount: sorted.length,
+      timezone,
+      range,
+      interval,
+      note: "Yahoo OHLCV source data dates, not fetch/cache timestamps.",
+    },
     rows: sorted.slice(-20),
     technicalRows,
     ...technical,
     sourceNote: "Yahoo Finance chart raw OHLCV validation",
     rawCount: sorted.length,
+  };
+}
+
+
+function buildYahooOhlcvDataTimeSummary(stocks: any[]) {
+  const dates = (Array.isArray(stocks) ? stocks : [])
+    .map((stock) => stock?.dataTime?.latestOhlcvDate)
+    .filter(Boolean)
+    .sort();
+  const firstDates = (Array.isArray(stocks) ? stocks : [])
+    .map((stock) => stock?.dataTime?.firstOhlcvDate)
+    .filter(Boolean)
+    .sort();
+
+  return {
+    latestOhlcvDate: dates[dates.length - 1] || null,
+    earliestOhlcvDate: firstDates[0] || null,
+    symbolsWithDataTime: dates.length,
+    note: "Yahoo OHLCV source data dates, not fetch/cache timestamps.",
   };
 }
 
@@ -491,6 +519,7 @@ async function uncachedGET(request: Request) {
     source: "yahoo_ohlcv_validation",
     requestedSymbols: symbols,
     count: stocks.length,
+    dataTimeSummary: buildYahooOhlcvDataTimeSummary(stocks),
     stocks,
     errors,
     fetchedAt: new Date().toISOString(),
@@ -505,7 +534,7 @@ export async function GET(request: Request) {
   const wrapperStartedAt = new Date().toISOString();
   const url = new URL(request.url);
   const force = isForceRefresh(url.searchParams);
-  const cacheKey = buildRouteCacheKey("yahoo_ohlcv", request.url);
+  const cacheKey = buildRouteCacheKey("yahoo_ohlcv_v02c", request.url);
 
   try {
     const cached = await getOrFetchScheduledDailyCached({

@@ -3,7 +3,7 @@ import { getOrFetchCached, isForceRefresh, normalizeCacheKeyPart, parseTtlMs } f
 
 export const dynamic = "force-dynamic";
 
-const BUILD_VERSION = "ETF_INAV_CACHE_BUILD_27_TTL_20S";
+const BUILD_VERSION = "ETF_INAV_CACHE_BUILD_28_DATA_TIME_SUMMARY";
 const DEFAULT_CACHE_TTL_MS = 20 * 1000;
 
 type MisEtfItem = {
@@ -1684,6 +1684,21 @@ function toCompactInavResult(r: ProbeResult): CompactInavResult {
   };
 }
 
+
+function buildEtfInavDataTimeSummary(results: CompactInavResult[]) {
+  const rows = Array.isArray(results) ? results : [];
+  const dataTimes = rows.map((row) => row.dataTime).filter(Boolean).sort();
+  const navDates = rows.map((row) => row.navDate || row.businessDay).filter(Boolean).sort();
+
+  return {
+    latestDataTime: dataTimes[dataTimes.length - 1] || null,
+    latestNavDate: navDates[navDates.length - 1] || null,
+    symbolsWithDataTime: dataTimes.length,
+    symbolsWithNavDate: navDates.length,
+    note: "ETF iNAV source data time/date from official parsers, not fetch/cache timestamps.",
+  };
+}
+
 async function uncachedGET(req: NextRequest) {
   const startedAt = new Date().toISOString();
   const url = new URL(req.url);
@@ -1737,6 +1752,7 @@ async function uncachedGET(req: NextRequest) {
       finishedAt: new Date().toISOString(),
       input: { symbols },
       summary: compactSummary,
+      dataTimeSummary: buildEtfInavDataTimeSummary(compactResults),
       policy: {
         purpose: "Compact ETF iNAV endpoint. BUILD_26 supports Yuanta, Fubon, and Cathay official/probed parsers.",
         doesNotModifyScore: true,
@@ -1772,7 +1788,7 @@ export async function GET(req: NextRequest) {
   const debug = url.searchParams.get("debug") === "1";
   const force = isForceRefresh(url.searchParams);
   const cacheTtlMs = parseTtlMs(url.searchParams, DEFAULT_CACHE_TTL_MS);
-  const cacheKey = ["etf_inav", normalizeCacheKeyPart(symbols), debug ? "debug=1" : "debug=0"].join(":");
+  const cacheKey = ["etf_inav_v28", normalizeCacheKeyPart(symbols), debug ? "debug=1" : "debug=0"].join(":");
 
   try {
     const cached = await getOrFetchCached({
@@ -1799,7 +1815,7 @@ export async function GET(req: NextRequest) {
           realtime: true,
           ttlMs: cacheTtlMs,
           force,
-          sourceUpdateTimeField: "results[].dataTime / results[].navDate / finishedAt",
+          sourceUpdateTimeField: "results[].dataTime / results[].navDate; finishedAt is fetch time only",
         },
         wrapperStartedAt,
         wrapperFinishedAt: new Date().toISOString(),
