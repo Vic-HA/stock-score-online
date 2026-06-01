@@ -4,7 +4,7 @@ import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache"
 
 export const dynamic = "force-dynamic";
 
-const CACHE_BUILD_VERSION = "CACHE_BUILD_02F_FINMIND_PROFILE_DATA_TIME";
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02H_SCORE_FUNDAMENTAL_AUTO_HYDRATE";
 
 function buildRouteCacheKey(prefix: string, requestUrl: string) {
   const url = new URL(requestUrl);
@@ -91,6 +91,7 @@ const FINMIND_PROFILE_DATASETS: Record<string, string[]> = {
     "TaiwanStockMonthRevenue",
     "TaiwanStockFinancialStatements",
     "TaiwanStockBalanceSheet",
+    "TaiwanStockPER",
   ],
 };
 
@@ -122,7 +123,7 @@ function saveLastGoodFullPayload(payload: any) {
 
 const SCORE_FIELD_KEYS = [
   "dailyClose", "dailyOpen", "dailyHigh", "dailyLow", "dailyPrevClose", "dailyVolume",
-  "high20", "low20", "avgVolume20", "ma5", "ma20", "ma60", "rsi14", "return20d", "return60d",
+  "high20", "low20", "avgVolume10", "volume10maFinMind", "avgVolume20", "ma5", "ma20", "ma60", "rsi14", "return20d", "return60d",
   "priceRowCount", "technicalWarmupStatus",
   "macd", "macdSignal", "macdHist", "macdHistPrev1", "macdHistPrev3", "macdHistDelta3", "macdHistTrend3", "macdState", "macdWarmupReady",
   "k9", "d9", "j9", "k9Prev1", "d9Prev1", "kdDiff", "kdDiffPrev1", "kdDiffTrend3", "kdCross", "kdState", "kdWarmupReady",
@@ -1226,6 +1227,7 @@ async function buildStock(symbol: string, token: string, profile = "full") {
 
   const latestPrice = priceSorted[priceSorted.length - 1] || null;
   const previousPrice = priceSorted[priceSorted.length - 2] || latestPrice;
+  const last10 = priceSorted.slice(-10);
   const last20 = priceSorted.slice(-20);
   const closes = priceSorted.map((row) => row.close);
   const technicalIndicators = {
@@ -1302,6 +1304,8 @@ async function buildStock(symbol: string, token: string, profile = "full") {
     dailyLow: latestPrice?.min ?? null,
     dailyPrevClose: previousPrice?.close ?? null,
     dailyVolume: latestPrice?.Trading_Volume ?? null,
+    avgVolume10: average(last10.map((row) => row.Trading_Volume)),
+    volume10maFinMind: average(last10.map((row) => row.Trading_Volume)),
     high20: last20.length ? Math.max(...last20.map((row) => row.max)) : null,
     low20: last20.length ? Math.min(...last20.map((row) => row.min)) : null,
     avgVolume20: average(last20.map((row) => row.Trading_Volume)),
@@ -1401,6 +1405,99 @@ async function buildStock(symbol: string, token: string, profile = "full") {
 }
 
 
+function hasUsableFundamentalFields(stock: any) {
+  return [stock?.eps, stock?.epsTtm, stock?.epsGrowthYoY, stock?.epsTtmGrowthYoY]
+    .some((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+}
+
+function hasUsableDividendYieldField(stock: any) {
+  return stock?.dividendYield !== null && stock?.dividendYield !== undefined && Number.isFinite(Number(stock.dividendYield));
+}
+
+function mergeFundamentalIntoScoreStock(scoreStock: any, fundamentalStock: any) {
+  const merged = { ...scoreStock };
+  copyFieldsFromLastGood(merged, fundamentalStock, [...FUNDAMENTAL_FIELD_KEYS, ...VALUATION_FIELD_KEYS]);
+  merged.dataTime = mergeDataTimeWithLastGood(scoreStock?.dataTime || {}, fundamentalStock?.dataTime || {});
+  merged.profileDataTime = buildProfileDataTime(merged.dataTime);
+  merged.staleFundamental = false;
+  merged.staleScore = false;
+  merged.mergedFromFundamentalProfile = true;
+  merged.fundamentalHydratedAt = new Date().toISOString();
+  merged.fundamentalHydrationSource = "profile=fundamental";
+  return merged;
+}
+
+async function hydrateScoreStocksWithFundamentals(stocks: any[], token: string, profile: string) {
+  const normalizedProfile = normalizeFinMindProfile(profile);
+  if (normalizedProfile !== "score") {
+    return {
+      stocks,
+      fundamentalHydration: {
+        enabled: false,
+        reason: `profile=${normalizedProfile}`,
+      },
+    };
+  }
+
+  const missing = (Array.isArray(stocks) ? stocks : [])
+    .filter((stock) => stock?.symbol && (!hasUsableFundamentalFields(stock) || !hasUsableDividendYieldField(stock)))
+    .map((stock) => String(stock.symbol));
+
+  if (!missing.length) {
+    return {
+      stocks,
+      fundamentalHydration: {
+        enabled: true,
+        fetched: false,
+        reason: "score already has cached fundamental / dividendYield fields",
+        missingSymbols: [],
+        hydratedSymbols: [],
+        failedSymbols: [],
+      },
+    };
+  }
+
+  const results = await Promise.allSettled(
+    missing.map((symbol) => buildStock(symbol, token, "fundamental"))
+  );
+
+  const bySymbol = new Map<string, any>();
+  const failedSymbols: string[] = [];
+
+  results.forEach((result, index) => {
+    const symbol = missing[index];
+    if (result.status === "fulfilled" && result.value && !result.value.error) {
+      bySymbol.set(symbol, result.value);
+      return;
+    }
+    failedSymbols.push(symbol);
+  });
+
+  const hydratedStocks = (Array.isArray(stocks) ? stocks : []).map((stock) => {
+    const symbol = String(stock?.symbol || "");
+    const fundamental = bySymbol.get(symbol);
+    if (!fundamental || !hasUsableFundamentalFields(fundamental)) return stock;
+    const merged = mergeFundamentalIntoScoreStock(stock, fundamental);
+    saveLastGoodFullStock(merged);
+    return merged;
+  });
+
+  return {
+    stocks: hydratedStocks,
+    fundamentalHydration: {
+      enabled: true,
+      fetched: true,
+      reason: "score profile auto-hydrated missing EPS/fundamental/dividendYield fields from profile=fundamental",
+      missingSymbols: missing,
+      hydratedSymbols: Array.from(bySymbol.keys()),
+      failedSymbols,
+      datasetsPerMissingSymbol: FINMIND_PROFILE_DATASETS.fundamental.length,
+      note: "This keeps score profile lightweight while filling low-frequency EPS fields without requiring a full profile fetch every time.",
+    },
+  };
+}
+
+
 function buildProfileDataSummary(stocks: any[], profile: string) {
   const dataTimes = (Array.isArray(stocks) ? stocks : []).map((stock) => stock?.dataTime || {});
   const latest = (key: string) => {
@@ -1446,7 +1543,7 @@ async function uncachedGET(request: Request) {
     symbols.map((symbol) => buildStock(symbol, token, profile))
   );
 
-  const stocks = results
+  let stocks = results
     .map((result, index) => {
       if (result.status === "fulfilled") return result.value;
 
@@ -1456,6 +1553,9 @@ async function uncachedGET(request: Request) {
       };
     })
     .filter((row: any) => !row.error);
+
+  const hydrationResult = await hydrateScoreStocksWithFundamentals(stocks, token, profile);
+  stocks = hydrationResult.stocks;
 
   const errors = results
     .map((result, index) => {
@@ -1488,6 +1588,7 @@ async function uncachedGET(request: Request) {
     profileDatasets,
     count: stocks.length,
     profileDataSummary: buildProfileDataSummary(stocks, profile),
+    fundamentalHydration: hydrationResult.fundamentalHydration,
     stocks,
     errors,
     fetchedAt: new Date().toISOString(),
@@ -1500,7 +1601,7 @@ async function uncachedGET(request: Request) {
         profile === "full"
           ? "Full profile fetches all 7 FinMind datasets and updates lastGoodFull for later partial-refresh merge."
           : profile === "score"
-            ? "Score profile fetches Price + Institutional + Margin only. Fundamental/valuation fields are merged from lastGoodFull when available."
+            ? "Score profile fetches Price + Institutional + Margin first, then auto-hydrates missing EPS/fundamental fields from profile=fundamental and caches the merged result."
             : "Fundamental profile fetches MonthRevenue + FinancialStatements + BalanceSheet only. Score fields are merged from lastGoodFull when available.",
     },
   });
@@ -1567,7 +1668,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const force = isForceRefresh(url.searchParams);
   const cacheTtlMs = parseTtlMs(url.searchParams, 60 * 60 * 1000);
-  const cacheKey = buildRouteCacheKey("finmind_stocks_profile_v02f", request.url);
+  const cacheKey = buildRouteCacheKey("finmind_stocks_profile_v02g", request.url);
 
   try {
     const cached = await getOrFetchCached({
