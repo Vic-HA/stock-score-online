@@ -3,24 +3,24 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_4",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-16T07:07:02.909Z",
-  "finishedAt": "2026-06-16T07:07:10.009Z",
+  "startedAt": "2026-06-16T09:29:30.424Z",
+  "finishedAt": "2026-06-16T09:29:35.610Z",
   "requestedSymbols": [
-    "1216",
-    "1101",
-    "1102"
+    "2330",
+    "0050",
+    "2454"
   ],
   "passSymbols": [
-    "1216",
-    "1101",
-    "1102"
+    "2330",
+    "0050",
+    "2454"
   ],
   "partialSymbols": [],
   "failedSymbols": [],
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "1216",
+      "symbol": "2330",
       "state": "pass",
       "rowCount": 149,
       "latestDate": "2026-06-16",
@@ -28,17 +28,17 @@
       "warnings": []
     },
     {
-      "symbol": "1101",
+      "symbol": "0050",
       "state": "pass",
-      "rowCount": 169,
+      "rowCount": 149,
       "latestDate": "2026-06-16",
       "source": "twse_route",
       "warnings": []
     },
     {
-      "symbol": "1102",
+      "symbol": "2454",
       "state": "pass",
-      "rowCount": 169,
+      "rowCount": 149,
       "latestDate": "2026-06-16",
       "source": "twse_route",
       "warnings": []
@@ -48,9 +48,9 @@
   "dryRun": false,
   "auto": {
     "staleHours": 12,
-    "maxSymbols": 3,
-    "failOnPartial": false,
-    "explicitSymbols": false
+    "maxSymbols": 0,
+    "failOnPartial": true,
+    "explicitSymbols": true
   },
   "compatibilitySnapshot": {
     "path": "data/twse-history-snapshot.json",

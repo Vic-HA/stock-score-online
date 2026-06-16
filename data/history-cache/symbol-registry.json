@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "build": "PHASE_D_HISTORY_CACHE_V0",
-  "updatedAt": "2026-06-16T07:07:09.917Z",
+  "updatedAt": "2026-06-16T09:29:35.523Z",
   "symbols": {
     "1101": {
       "active": true,
@@ -89,9 +89,9 @@
     },
     "2330": {
       "active": true,
-      "lastRequestedAt": "2026-06-16T07:06:52.206Z",
-      "lastRefreshAt": "2026-06-16T07:06:52.206Z",
-      "lastGoodAt": "2026-06-16T07:06:52.206Z",
+      "lastRequestedAt": "2026-06-16T09:29:30.435Z",
+      "lastRefreshAt": "2026-06-16T09:29:30.435Z",
+      "lastGoodAt": "2026-06-16T09:29:30.435Z",
       "inactiveAt": null
     },
     "2345": {
@@ -152,9 +152,9 @@
     },
     "2454": {
       "active": true,
-      "lastRequestedAt": "2026-06-16T07:06:52.206Z",
-      "lastRefreshAt": "2026-06-16T07:06:52.206Z",
-      "lastGoodAt": "2026-06-16T07:06:52.206Z",
+      "lastRequestedAt": "2026-06-16T09:29:30.435Z",
+      "lastRefreshAt": "2026-06-16T09:29:30.435Z",
+      "lastGoodAt": "2026-06-16T09:29:30.435Z",
       "inactiveAt": null
     },
     "2474": {
@@ -348,9 +348,9 @@
     },
     "0050": {
       "active": true,
-      "lastRequestedAt": "2026-06-16T07:06:52.206Z",
-      "lastRefreshAt": "2026-06-16T07:06:52.206Z",
-      "lastGoodAt": "2026-06-16T07:06:52.206Z",
+      "lastRequestedAt": "2026-06-16T09:29:30.435Z",
+      "lastRefreshAt": "2026-06-16T09:29:30.435Z",
+      "lastGoodAt": "2026-06-16T09:29:30.435Z",
       "inactiveAt": null
     }
   },

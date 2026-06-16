@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { getOrFetchCached, isForceRefresh, normalizeCacheKeyPart } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
 
 const BUILD_VERSION = "TWSE_HISTORY_BUILD_02H_RETRY_BACKOFF_HARDENED";
+const PHASE_D_ROUTE_AUTO_REFRESH_BUILD = "PHASE_D_HISTORY_ROUTE_AUTO_REFRESH_V0_5";
 const MAX_SYMBOLS = 50;
 const DEFAULT_TIMEOUT_MS = 25_000;
 const DEFAULT_CONCURRENCY = 3;
@@ -743,6 +746,9 @@ type V73SnapshotPayload = {
 
 const V73A4_SNAPSHOT_ROUTE_BUILD = "V73A4_TWSE_HISTORY_SNAPSHOT_FIRST_01";
 const V73A4_SNAPSHOT_PATH = path.join(process.cwd(), "data", "twse-history-snapshot.json");
+const PHASE_D_HISTORY_STATUS_PATH = path.join(process.cwd(), "data", "history-cache", "status.json");
+const PHASE_D_HISTORY_REFRESH_SCRIPT_PATH = path.join(process.cwd(), "scripts", "phase-d-refresh-history-cache.mjs");
+const execFileAsync = promisify(execFile);
 
 function shouldUseV73Snapshot(req: NextRequest) {
   const params = req.nextUrl.searchParams;
@@ -802,6 +808,186 @@ function buildV73SnapshotTechnicalSummary(results: any[]) {
     total: count,
     note: "Calculated from local TWSE snapshot rows.",
   };
+}
+
+
+
+type PhaseDAutoRefreshResult = {
+  build: string;
+  enabled: boolean;
+  attempted: boolean;
+  skippedReason?: string;
+  ok?: boolean;
+  symbols?: string[];
+  ttlMs?: number;
+  lastAutoRefreshAt?: string | null;
+  ageMs?: number | null;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+};
+
+const phaseDAutoGlobal = globalThis as typeof globalThis & {
+  __stockScorePhaseDHistoryAutoRefreshPromise?: Promise<PhaseDAutoRefreshResult> | null;
+};
+
+function envFlag(name: string) {
+  const value = String(process.env[name] || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+function envFlagOff(name: string) {
+  const value = String(process.env[name] || "").trim().toLowerCase();
+  return value === "0" || value === "false" || value === "no" || value === "off";
+}
+
+function parseBoundedNumber(value: unknown, fallback: number, min: number, max: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function isPhaseDRouteAutoRefreshEnabled(req: NextRequest) {
+  const raw = req.nextUrl.searchParams.get("historyAutoRefresh") || req.nextUrl.searchParams.get("phaseDAutoRefresh");
+  if (raw === "1" || raw === "true") return true;
+  if (raw === "0" || raw === "false") return false;
+
+  if (envFlag("PHASE_D_HISTORY_CACHE_AUTO_REFRESH")) return true;
+  if (envFlagOff("PHASE_D_HISTORY_CACHE_AUTO_REFRESH")) return false;
+
+  // Local dev default only. Production should use GitHub Actions / durable cache refresh.
+  return process.env.NODE_ENV === "development";
+}
+
+function phaseDAutoRefreshTtlMs(req: NextRequest) {
+  const raw = req.nextUrl.searchParams.get("historyAutoRefreshTtlMs")
+    || req.nextUrl.searchParams.get("phaseDAutoRefreshTtlMs")
+    || process.env.PHASE_D_HISTORY_CACHE_AUTO_REFRESH_TTL_MS;
+  return parseBoundedNumber(raw, 60 * 60 * 1000, 60 * 1000, 12 * 60 * 60 * 1000);
+}
+
+function phaseDAutoRefreshTimeoutMs(req: NextRequest) {
+  const raw = req.nextUrl.searchParams.get("historyAutoRefreshTimeoutMs")
+    || process.env.PHASE_D_HISTORY_CACHE_AUTO_REFRESH_TIMEOUT_MS;
+  return parseBoundedNumber(raw, 180_000, 30_000, 10 * 60 * 1000);
+}
+
+function phaseDAutoRefreshMaxSymbols(req: NextRequest, requestedCount: number) {
+  const raw = req.nextUrl.searchParams.get("historyAutoMaxSymbols")
+    || req.nextUrl.searchParams.get("phaseDAutoMaxSymbols")
+    || process.env.PHASE_D_HISTORY_CACHE_AUTO_MAX_SYMBOLS;
+  return parseBoundedNumber(raw, requestedCount || MAX_SYMBOLS, 1, MAX_SYMBOLS);
+}
+
+async function readPhaseDHistoryStatus() {
+  try {
+    return JSON.parse(await fs.readFile(PHASE_D_HISTORY_STATUS_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function lastAutoRefreshAtFromStatus(status: any): string | null {
+  if (!status || status.mode !== "auto") return null;
+  return status.finishedAt || status.startedAt || null;
+}
+
+function compactOutput(value: string | undefined, maxLength = 1600) {
+  const raw = String(value || "").trim();
+  if (raw.length <= maxLength) return raw;
+  return `${raw.slice(0, maxLength)}...<truncated>`;
+}
+
+async function maybeRunPhaseDHistoryAutoRefresh(req: NextRequest, symbols: string[]): Promise<PhaseDAutoRefreshResult> {
+  const enabled = isPhaseDRouteAutoRefreshEnabled(req);
+  const baseResult: PhaseDAutoRefreshResult = {
+    build: PHASE_D_ROUTE_AUTO_REFRESH_BUILD,
+    enabled,
+    attempted: false,
+    symbols,
+  };
+
+  if (!enabled) return { ...baseResult, skippedReason: "disabled" };
+  if (!symbols.length) return { ...baseResult, skippedReason: "no_symbols" };
+  if (!shouldUseV73Snapshot(req)) return { ...baseResult, skippedReason: "force_or_live_request" };
+
+  const ttlMs = phaseDAutoRefreshTtlMs(req);
+  const status = await readPhaseDHistoryStatus();
+  const lastAutoRefreshAt = lastAutoRefreshAtFromStatus(status);
+  const lastAutoMs = Date.parse(lastAutoRefreshAt || "");
+  const ageMs = Number.isFinite(lastAutoMs) ? Date.now() - lastAutoMs : null;
+  const force = req.nextUrl.searchParams.get("historyAutoForce") === "1" || req.nextUrl.searchParams.get("phaseDAutoForce") === "1";
+
+  if (!force && ageMs !== null && ageMs >= 0 && ageMs < ttlMs) {
+    return {
+      ...baseResult,
+      ttlMs,
+      lastAutoRefreshAt,
+      ageMs,
+      skippedReason: "fresh_within_ttl",
+    };
+  }
+
+  if (phaseDAutoGlobal.__stockScorePhaseDHistoryAutoRefreshPromise) {
+    return {
+      ...baseResult,
+      ttlMs,
+      lastAutoRefreshAt,
+      ageMs,
+      skippedReason: "already_running",
+    };
+  }
+
+  const selectedSymbols = symbols.slice(0, phaseDAutoRefreshMaxSymbols(req, symbols.length));
+  const baseUrl = req.nextUrl.origin || process.env.PHASE_D_HISTORY_CACHE_BASE_URL || "http://localhost:3000";
+  const args = [
+    PHASE_D_HISTORY_REFRESH_SCRIPT_PATH,
+    "--mode=auto",
+    `--symbols=${selectedSymbols.join(",")}`,
+    `--baseUrl=${baseUrl}`,
+    "--autoFailOnPartial",
+  ];
+
+  const runPromise = execFileAsync(process.execPath, args, {
+    cwd: process.cwd(),
+    timeout: phaseDAutoRefreshTimeoutMs(req),
+    windowsHide: true,
+    maxBuffer: 1024 * 1024 * 4,
+    env: {
+      ...process.env,
+      // Prevent nested route-triggered auto refresh. The script uses force=1 internally.
+      PHASE_D_HISTORY_CACHE_AUTO_REFRESH: "0",
+    },
+  })
+    .then(({ stdout, stderr }) => ({
+      ...baseResult,
+      attempted: true,
+      ok: true,
+      symbols: selectedSymbols,
+      ttlMs,
+      lastAutoRefreshAt,
+      ageMs,
+      stdout: compactOutput(stdout),
+      stderr: compactOutput(stderr),
+    }))
+    .catch((error: any) => ({
+      ...baseResult,
+      attempted: true,
+      ok: false,
+      symbols: selectedSymbols,
+      ttlMs,
+      lastAutoRefreshAt,
+      ageMs,
+      stdout: compactOutput(error?.stdout),
+      stderr: compactOutput(error?.stderr),
+      error: error?.message || String(error),
+    }))
+    .finally(() => {
+      phaseDAutoGlobal.__stockScorePhaseDHistoryAutoRefreshPromise = null;
+    });
+
+  phaseDAutoGlobal.__stockScorePhaseDHistoryAutoRefreshPromise = runPromise;
+  return runPromise;
 }
 
 async function tryBuildV73SnapshotPayload(req: NextRequest, symbols: string[], monthsBack: number, asOfDate: string | null) {
@@ -1010,9 +1196,19 @@ export async function GET(req: NextRequest) {
   const retryCount = clampNumber(Number(req.nextUrl.searchParams.get("retry") || req.nextUrl.searchParams.get("retryCount") || DEFAULT_RETRY_COUNT), 0, 4);
   const asOfDate = parseAsOfDate(req);
 
+  const phaseDAutoRefresh = await maybeRunPhaseDHistoryAutoRefresh(req, symbols);
   const snapshotPayload = await tryBuildV73SnapshotPayload(req, symbols, monthsBack, asOfDate);
   if (snapshotPayload) {
-    return NextResponse.json(snapshotPayload, { headers: jsonHeaders() });
+    return NextResponse.json(
+      {
+        ...snapshotPayload,
+        cachePolicy: {
+          ...(snapshotPayload.cachePolicy || {}),
+          phaseDAutoRefresh,
+        },
+      },
+      { headers: jsonHeaders() }
+    );
   }
 
   const cacheKey = [
