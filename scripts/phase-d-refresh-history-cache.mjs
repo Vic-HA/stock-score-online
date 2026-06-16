@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // scripts/phase-d-refresh-history-cache.mjs
-// BUILD: PHASE_D_HISTORY_CACHE_V0_2
+// BUILD: PHASE_D_HISTORY_CACHE_V0_4
 //
 // Purpose:
 // - Maintain per-symbol durable TWSE history cache files for stocks / ETFs.
@@ -10,7 +10,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const BUILD = "PHASE_D_HISTORY_CACHE_V0_3";
+const BUILD = "PHASE_D_HISTORY_CACHE_V0_4";
 const ROOT = process.cwd();
 const DEFAULT_SNAPSHOT_PATH = "data/twse-history-snapshot.json";
 const DEFAULT_CACHE_DIR = "data/history-cache";
@@ -61,19 +61,29 @@ function parseArgs() {
     prune: true,
     inactiveTtlDays: DEFAULT_INACTIVE_TTL_DAYS,
     maxStockCacheFiles: DEFAULT_MAX_STOCK_CACHE_FILES,
+    // V0.4 auto mode: simulate scheduled refresh in the same script.
+    // It uses the same refresh path as GitHub Actions will use later.
+    autoStaleHours: 12,
+    autoMaxSymbols: 0,
+    autoFailOnPartial: false,
+    explicitSymbols: false,
     dryRun: false,
   };
 
   for (const arg of args) {
     if (arg.startsWith("--mode=")) config.mode = arg.slice("--mode=".length).trim();
     if (arg.startsWith("--symbols=")) {
+      config.explicitSymbols = true;
       config.symbols = arg
         .slice("--symbols=".length)
         .split(",")
         .map(normalizeSymbol)
         .filter(Boolean);
     }
-    if (arg.startsWith("--symbolsFile=")) config.symbolsFile = arg.slice("--symbolsFile=".length).trim();
+    if (arg.startsWith("--symbolsFile=")) {
+      config.explicitSymbols = true;
+      config.symbolsFile = arg.slice("--symbolsFile=".length).trim();
+    }
     if (arg.startsWith("--baseUrl=")) config.baseUrl = arg.slice("--baseUrl=".length).trim();
     if (arg.startsWith("--snapshotPath=")) config.snapshotPath = arg.slice("--snapshotPath=".length).trim();
     if (arg.startsWith("--cacheDir=")) config.cacheDir = arg.slice("--cacheDir=".length).trim();
@@ -94,6 +104,9 @@ function parseArgs() {
     }
     if (arg.startsWith("--inactiveTtlDays=")) config.inactiveTtlDays = Number(arg.slice("--inactiveTtlDays=".length));
     if (arg.startsWith("--maxStockCacheFiles=")) config.maxStockCacheFiles = Number(arg.slice("--maxStockCacheFiles=".length));
+    if (arg.startsWith("--autoStaleHours=")) config.autoStaleHours = Number(arg.slice("--autoStaleHours=".length));
+    if (arg.startsWith("--autoMaxSymbols=")) config.autoMaxSymbols = Number(arg.slice("--autoMaxSymbols=".length));
+    if (arg === "--autoFailOnPartial") config.autoFailOnPartial = true;
     if (arg === "--force") config.force = true;
     if (arg === "--noFetch") config.noFetch = true;
     if (arg === "--noSnapshot") config.writeSnapshot = false;
@@ -667,16 +680,107 @@ async function rebuildCompatibilitySnapshot(config, registry, status, existingSn
   return snapshot;
 }
 
+function hoursBetween(startIso, endIso) {
+  const start = Date.parse(startIso || "");
+  const end = Date.parse(endIso || "");
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return Infinity;
+  return (end - start) / 3_600_000;
+}
+
+function normalizeMaybeDate(value) {
+  if (!value) return null;
+  return String(value).slice(0, 10);
+}
+
+async function selectAutoSymbols(config, symbols, snapshot, registry, now) {
+  // Explicit --symbols / --symbolsFile is always respected. This makes local smoke tests fast.
+  if (config.explicitSymbols) return symbols;
+
+  const scored = [];
+  for (const symbol of symbols) {
+    const cache = await readStockCache(config, symbol);
+    const snapshotRows = uniqueRows(snapshot.symbols?.[symbol] || [], config.retentionRows);
+    const cacheRows = uniqueRows(cache?.rows || [], config.retentionRows);
+    const rows = cacheRows.length ? cacheRows : snapshotRows;
+    const registryEntry = registry.symbols?.[symbol] || {};
+    const lastRefreshAt = cache?.status?.lastRefreshAt || registryEntry.lastRefreshAt || null;
+    const ageHours = hoursBetween(lastRefreshAt, now);
+    const rowCount = rows.length;
+    const isEmpty = rowCount === 0;
+    const isPartial = rowCount > 0 && rowCount < config.minGoodRows;
+    const cacheLatest = latestDate(rows);
+    const snapshotLatest = latestDate(snapshotRows);
+    const latestMismatch = Boolean(cacheLatest && snapshotLatest && cacheLatest < snapshotLatest);
+    const stale = config.force || !Number.isFinite(ageHours) || ageHours >= config.autoStaleHours;
+
+    if (config.force || isEmpty || isPartial || latestMismatch || stale) {
+      const score = [
+        isEmpty ? 0 : 1,
+        isPartial ? 0 : 1,
+        latestMismatch ? 0 : 1,
+        Number.isFinite(ageHours) ? -ageHours : -999999,
+        symbol,
+      ];
+      scored.push({ symbol, score, reason: { isEmpty, isPartial, latestMismatch, ageHours, stale } });
+    }
+  }
+
+  scored.sort((a, b) => {
+    for (let i = 0; i < a.score.length; i += 1) {
+      if (a.score[i] < b.score[i]) return -1;
+      if (a.score[i] > b.score[i]) return 1;
+    }
+    return 0;
+  });
+
+  let selected = scored.map((item) => item.symbol);
+  if (config.autoMaxSymbols > 0) selected = selected.slice(0, config.autoMaxSymbols);
+
+  if (!selected.length) {
+    console.log(`[${BUILD}] AUTO no stale symbols found; verifying existing cache only.`);
+  } else {
+    console.log(`[${BUILD}] AUTO selected symbols=${selected.length}${config.autoMaxSymbols > 0 ? ` max=${config.autoMaxSymbols}` : ""}`);
+  }
+
+  return selected;
+}
+
+function validateCompatibilitySnapshot({ beforeSnapshot, afterSnapshot, config, status }) {
+  const beforeCount = Object.keys(beforeSnapshot?.symbols || {}).length;
+  const afterCount = Object.keys(afterSnapshot?.symbols || {}).length;
+  if (afterCount < beforeCount) {
+    status.ok = false;
+    status.warnings.push(`SNAPSHOT_SYMBOL_COUNT_ROLLBACK:${afterCount}<${beforeCount}`);
+  }
+
+  const beforeLatest = normalizeMaybeDate(beforeSnapshot?.sourceLatestDate);
+  const afterLatest = normalizeMaybeDate(afterSnapshot?.sourceLatestDate);
+  if (beforeLatest && afterLatest && afterLatest < beforeLatest) {
+    status.ok = false;
+    status.warnings.push(`SNAPSHOT_SOURCE_LATEST_ROLLBACK:${afterLatest}<${beforeLatest}`);
+  }
+
+  if (config.mode === "auto" && config.autoFailOnPartial && status.partialSymbols.length) {
+    status.ok = false;
+    status.warnings.push(`AUTO_PARTIAL_SYMBOLS:${status.partialSymbols.join(",")}`);
+  }
+}
+
 async function main() {
   const config = parseArgs();
   const startedAt = nowIso();
   const snapshot = await readExistingSnapshot(config);
   const registry = await readRegistry(config);
-  const symbols = await determineSymbols(config, snapshot, registry);
+  let symbols = await determineSymbols(config, snapshot, registry);
   validateSymbolInput(symbols);
 
-  if (!["migrate", "verify", "refresh", "prune"].includes(config.mode)) {
-    throw new Error(`Invalid --mode=${config.mode}. Use migrate, verify, refresh, or prune.`);
+  if (config.mode === "auto") {
+    symbols = await selectAutoSymbols(config, symbols, snapshot, registry, startedAt);
+    validateSymbolInput(symbols);
+  }
+
+  if (!["migrate", "verify", "refresh", "auto", "prune"].includes(config.mode)) {
+    throw new Error(`Invalid --mode=${config.mode}. Use migrate, verify, refresh, auto, or prune.`);
   }
 
   if (!Number.isFinite(config.retentionRows) || config.retentionRows < 60) throw new Error("Invalid retentionRows");
@@ -701,6 +805,12 @@ async function main() {
     results: [],
     warnings: [],
     dryRun: config.dryRun,
+    auto: config.mode === "auto" ? {
+      staleHours: config.autoStaleHours,
+      maxSymbols: config.autoMaxSymbols,
+      failOnPartial: config.autoFailOnPartial,
+      explicitSymbols: config.explicitSymbols,
+    } : null,
   };
 
   console.log(`[${BUILD}] START mode=${config.mode} symbols=${symbols.length} noFetch=${config.noFetch} dryRun=${config.dryRun}`);
@@ -709,7 +819,7 @@ async function main() {
   if (config.deactivate.length) deactivateSymbols(registry, config.deactivate, now);
 
   if (config.mode !== "prune") {
-    if (!symbols.length) {
+    if (!symbols.length && config.mode !== "auto") {
       status.ok = false;
       status.warnings.push("NO_SYMBOLS_FOUND");
     }
@@ -742,6 +852,7 @@ async function main() {
 
   status.finishedAt = nowIso();
   status.ok = status.failedSymbols.length === 0 && !status.warnings.includes("NO_SYMBOLS_FOUND");
+  if (compatibilitySnapshot) validateCompatibilitySnapshot({ beforeSnapshot: snapshot, afterSnapshot: compatibilitySnapshot, config, status });
   status.compatibilitySnapshot = compatibilitySnapshot
     ? {
         path: config.snapshotPath,

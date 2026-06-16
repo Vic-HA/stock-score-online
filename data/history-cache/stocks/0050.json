@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "build": "PHASE_D_HISTORY_CACHE_V0_3",
+  "build": "PHASE_D_HISTORY_CACHE_V0_4",
   "symbol": "0050",
   "type": "etf",
   "active": true,
   "createdAt": "2026-06-16T01:47:31.987Z",
-  "updatedAt": "2026-06-16T02:56:46.144Z",
+  "updatedAt": "2026-06-16T07:06:52.206Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -1200,11 +1200,19 @@
       "l": 104.3,
       "c": 105.25,
       "v": 100402843
+    },
+    {
+      "d": "2026-06-16",
+      "o": 106.05,
+      "h": 106.05,
+      "l": 104.85,
+      "c": 105.9,
+      "v": 70824506
     }
   ],
   "meta": {
-    "latestDate": "2026-06-15",
-    "rowCount": 148,
+    "latestDate": "2026-06-16",
+    "rowCount": 149,
     "retentionRows": 220,
     "ma60Ready": true,
     "macdWarmupReady": true,
@@ -1218,9 +1226,9 @@
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-06-16T02:56:46.144Z",
-    "lastRefreshAt": "2026-06-16T02:56:46.144Z",
-    "lastGoodAt": "2026-06-16T02:56:46.144Z",
+    "lastRequestedAt": "2026-06-16T07:06:52.206Z",
+    "lastRefreshAt": "2026-06-16T07:06:52.206Z",
+    "lastGoodAt": "2026-06-16T07:06:52.206Z",
     "lastError": null
   }
 }
