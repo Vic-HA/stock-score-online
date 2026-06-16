@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "build": "PHASE_D_HISTORY_CACHE_V0_3",
+  "mode": "refresh",
+  "ok": true,
+  "startedAt": "2026-06-16T02:56:46.128Z",
+  "finishedAt": "2026-06-16T02:56:50.815Z",
+  "requestedSymbols": [
+    "2330",
+    "0050",
+    "2454"
+  ],
+  "passSymbols": [
+    "2330",
+    "0050",
+    "2454"
+  ],
+  "partialSymbols": [],
+  "failedSymbols": [],
+  "prunedSymbols": [],
+  "results": [
+    {
+      "symbol": "2330",
+      "state": "pass",
+      "rowCount": 148,
+      "latestDate": "2026-06-15",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "0050",
+      "state": "pass",
+      "rowCount": 148,
+      "latestDate": "2026-06-15",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2454",
+      "state": "pass",
+      "rowCount": 148,
+      "latestDate": "2026-06-15",
+      "source": "twse_route",
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "dryRun": false,
+  "compatibilitySnapshot": {
+    "path": "data/twse-history-snapshot.json",
+    "symbols": 50,
+    "sourceLatestDate": "2026-06-15"
+  }
+}
