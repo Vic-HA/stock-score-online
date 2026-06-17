@@ -80,7 +80,7 @@ type MarketIndexItem = {
 const TWSE_MIS_BASE = "https://mis.twse.com.tw";
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_SYMBOLS = 50;
-const BUILD_VERSION = "TWSE_MIS_CACHE_BUILD_02B_TTL_15S_SYNTAX_FIX";
+const BUILD_VERSION = "TWSE_MIS_CACHE_BUILD_02C_FIRST_LOAD_RETRY";
 const DEFAULT_CACHE_TTL_MS = 15 * 1000;
 
 function json(data: any, status = 200) {
@@ -437,6 +437,73 @@ function buildMarketIndex(rawRows: TwseMisRaw[], fetchedAtMs: number): MarketInd
   return null;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getUsableQuotePrice(row: NormalizedRow | null | undefined): number | null {
+  const price = row?.price;
+  if (typeof price === "number" && Number.isFinite(price) && price > 0) return price;
+  const displayPrice = row?.displayPrice;
+  if (typeof displayPrice === "number" && Number.isFinite(displayPrice) && displayPrice > 0) return displayPrice;
+  const quoteMidPrice = row?.quoteMidPrice;
+  if (typeof quoteMidPrice === "number" && Number.isFinite(quoteMidPrice) && quoteMidPrice > 0) return quoteMidPrice;
+  return null;
+}
+
+function summarizeQuoteResult(result: Awaited<ReturnType<typeof fetchTwseMisQuotes>>) {
+  const requested = Array.isArray(result?.requestedSymbols) ? result.requestedSymbols.filter((symbol) => !isMarketIndexSymbol(symbol)) : [];
+  const rowSymbols = new Set((Array.isArray(result?.rows) ? result.rows : []).map((row) => normalizeSymbol(row?.symbol || row?.stock_id)).filter(Boolean));
+  const priceSymbols = new Set((Array.isArray(result?.rows) ? result.rows : []).filter((row) => getUsableQuotePrice(row) !== null).map((row) => normalizeSymbol(row?.symbol || row?.stock_id)).filter(Boolean));
+  return {
+    requestedCount: requested.length,
+    rowCount: rowSymbols.size,
+    usablePriceCount: priceSymbols.size,
+    missingSymbols: requested.filter((symbol) => !rowSymbols.has(symbol)),
+    priceMissingSymbols: requested.filter((symbol) => !priceSymbols.has(symbol)),
+  };
+}
+
+function shouldRetryQuoteResult(result: Awaited<ReturnType<typeof fetchTwseMisQuotes>>) {
+  const summary = summarizeQuoteResult(result);
+  if (!summary.requestedCount) return false;
+  if (!summary.rowCount) return true;
+  if (summary.missingSymbols.length) return true;
+  return summary.priceMissingSymbols.length > 0;
+}
+
+function chooseBetterQuoteResult<T extends Awaited<ReturnType<typeof fetchTwseMisQuotes>> | null>(current: T, next: Awaited<ReturnType<typeof fetchTwseMisQuotes>>): Awaited<ReturnType<typeof fetchTwseMisQuotes>> {
+  if (!current) return next;
+  const currentSummary = summarizeQuoteResult(current);
+  const nextSummary = summarizeQuoteResult(next);
+  if (nextSummary.usablePriceCount > currentSummary.usablePriceCount) return next;
+  if (nextSummary.usablePriceCount === currentSummary.usablePriceCount && nextSummary.rowCount > currentSummary.rowCount) return next;
+  return current;
+}
+
+async function fetchTwseMisQuotesWithRetry(symbols: string[], timeoutMs: number, fetchedAtMs: number) {
+  const attempts = 3;
+  let bestResult: Awaited<ReturnType<typeof fetchTwseMisQuotes>> | null = null;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const attemptFetchedAtMs = attempt === 1 ? fetchedAtMs : Date.now();
+      const result = await fetchTwseMisQuotes(symbols, timeoutMs, attemptFetchedAtMs);
+      bestResult = chooseBetterQuoteResult(bestResult, result);
+      if (!shouldRetryQuoteResult(result)) break;
+      if (attempt < attempts) await sleep(350 * attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await sleep(350 * attempt);
+    }
+  }
+
+  if (!bestResult && lastError) throw lastError;
+  if (!bestResult) return fetchTwseMisQuotes(symbols, timeoutMs, Date.now());
+  return bestResult;
+}
+
 async function fetchTwseMisQuotes(symbols: string[], timeoutMs: number, fetchedAtMs: number) {
   if (!symbols.length) {
     return {
@@ -543,7 +610,8 @@ export async function GET(request: Request) {
       meta: { symbols, includeEtfList },
       fetcher: async () => {
         const fetchedAtMs = Date.now();
-        const quoteResult = await fetchTwseMisQuotes(symbols, timeoutMs, fetchedAtMs);
+        const quoteResult = await fetchTwseMisQuotesWithRetry(symbols, timeoutMs, fetchedAtMs);
+        const quoteSummary = summarizeQuoteResult(quoteResult);
         const etfListResult = includeEtfList ? await fetchEtfList(timeoutMs) : null;
 
         return {
@@ -553,8 +621,9 @@ export async function GET(request: Request) {
           version: BUILD_VERSION,
           refreshHintSec: 5,
           note:
-            "TWSE MIS 盤中近即時價量來源。股票可用 last price / volume；ETF 多數 z 為 '-'，因此提供 displayPrice/quoteMidPrice 作五檔參考價。ETF 另提供 B0 清單、行情與 raw.nu 投信 NAV 連結。支援 t00 / TAIEX 查詢加權指數，回傳 marketIndex 並計算與昨收相比的漲跌與漲跌%。ETF iNAV / 折溢價由 /api/etf/inav 提供，不進短線分數。",
+            "TWSE MIS 盤中近即時價量來源。股票可用 last price / volume；ETF 多數 z 為 '-'，因此提供 displayPrice/quoteMidPrice 作五檔參考價。ETF 另提供 B0 清單、行情與 raw.nu 投信 NAV 連結。支援 t00 / TAIEX 查詢加權指數，回傳 marketIndex 並計算與昨收相比的漲跌與漲跌%。ETF iNAV / 折溢價由 /api/etf/inav 提供，不進短線分數。首次載入若遇到 MIS 空包 / 部分缺價，route 會短暫重試後回傳最佳結果。",
           requestedSymbols: symbols,
+          quoteSummary,
           count: quoteResult.rows.length,
           rows: quoteResult.rows.map((row) => ({
             ...row,
@@ -563,6 +632,7 @@ export async function GET(request: Request) {
           })),
           rawDataMap: quoteResult.rawDataMap,
           missingSymbols: quoteResult.missingSymbols,
+          priceMissingSymbols: quoteSummary.priceMissingSymbols,
           marketIndex: quoteResult.marketIndex
             ? {
                 ...quoteResult.marketIndex,

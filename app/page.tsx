@@ -387,47 +387,114 @@ async function fetchCsvText(url, timeoutMs) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function getTwseMisUsablePrice(row) {
+  const price = parseNum(row?.price, null);
+  if (price !== null && price > 0) return price;
+  const displayPrice = parseNum(row?.displayPrice, null);
+  if (displayPrice !== null && displayPrice > 0) return displayPrice;
+  const quoteMidPrice = parseNum(row?.quoteMidPrice, null);
+  if (quoteMidPrice !== null && quoteMidPrice > 0) return quoteMidPrice;
+  return null;
+}
+
+function summarizeTwseMisRows(rows = [], normalizedSymbols = []) {
+  const requested = normalizedSymbols.map(normalizeStockSymbol).filter(Boolean);
+  const rowSymbols = new Set(rows.map((row) => normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c)).filter(Boolean));
+  const priceSymbols = new Set(rows.filter((row) => getTwseMisUsablePrice(row) !== null).map((row) => normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c)).filter(Boolean));
+  return {
+    requestedCount: requested.length,
+    rowCount: rowSymbols.size,
+    usablePriceCount: priceSymbols.size,
+    missingSymbols: requested.filter((symbol) => !rowSymbols.has(symbol)),
+    priceMissingSymbols: requested.filter((symbol) => !priceSymbols.has(symbol)),
+  };
+}
+
+function shouldRetryTwseMisRows(rows = [], normalizedSymbols = []) {
+  const summary = summarizeTwseMisRows(rows, normalizedSymbols);
+  if (!summary.requestedCount) return false;
+  if (!summary.rowCount) return true;
+  if (summary.missingSymbols.length) return true;
+  return summary.priceMissingSymbols.length > 0;
+}
+
+function chooseBetterTwseMisRows(currentRows = [], nextRows = [], normalizedSymbols = []) {
+  const currentSummary = summarizeTwseMisRows(currentRows, normalizedSymbols);
+  const nextSummary = summarizeTwseMisRows(nextRows, normalizedSymbols);
+  if (nextSummary.usablePriceCount > currentSummary.usablePriceCount) return nextRows;
+  if (nextSummary.usablePriceCount === currentSummary.usablePriceCount && nextSummary.rowCount > currentSummary.rowCount) return nextRows;
+  return currentRows;
+}
+
 async function fetchTwseMisRows(symbols = [], timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, proxyUrl = DEFAULT_TWSE_MIS_PROXY_URL) {
   const normalizedSymbols = symbols.map(normalizeStockSymbol).filter(Boolean);
   if (!normalizedSymbols.length) return [];
 
-  // TWSE MIS must be fetched through our Next.js API route.
-  // Direct browser fetch often hits CORS / unstable proxy timeout, so keep this as a server-side proxy.
   const query = encodeURIComponent(normalizedSymbols.join(","));
   const baseUrl = proxyUrl || DEFAULT_TWSE_MIS_PROXY_URL;
-  const sep = baseUrl.includes("?") ? "&" : "?";
-  const url = `${baseUrl}${sep}symbols=${query}&_=${Date.now()}`;
-  const res = await fetchWithTimeout(url, {
-    cache: "no-store",
-    headers: { "Accept": "application/json,text/plain,*/*" },
-  }, timeoutMs);
+  const attempts = 3;
+  let bestRows = [];
+  let bestJson = null;
+  let lastError = null;
 
-  if (!res.ok) throw new Error(`TWSE MIS proxy HTTP ${res.status}`);
-  const json = await res.json();
-  if (!json?.ok) throw new Error(json?.error || "TWSE MIS proxy failed");
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const sep = baseUrl.includes("?") ? "&" : "?";
+    const forcePart = attempt > 1 ? "&force=1&cacheTtlMs=0" : "";
+    const url = `${baseUrl}${sep}symbols=${query}${forcePart}&_=${Date.now()}`;
 
-  const rows = Array.isArray(json.rows) ? json.rows : Array.isArray(json.data) ? json.data : [];
-  const requested = new Set(normalizedSymbols);
-  const seen = new Set();
-  const filteredRows = rows
-    .filter(Boolean)
-    .filter((row) => requested.has(normalizeStockSymbol(row.symbol || row.stock_id || row.c)))
-    .filter((row) => row.price !== null || row.volume !== null || row.tradetime)
-    .filter((row) => {
-      const symbol = normalizeStockSymbol(row.symbol || row.stock_id || row.c);
-      if (seen.has(symbol)) return false;
-      seen.add(symbol);
-      return true;
-    });
+    try {
+      const res = await fetchWithTimeout(url, {
+        cache: "no-store",
+        headers: { "Accept": "application/json,text/plain,*/*" },
+      }, timeoutMs);
 
-  filteredRows.sourceRuntime = buildApiSourceRuntime({
+      if (!res.ok) throw new Error(`TWSE MIS proxy HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json?.ok) throw new Error(json?.error || "TWSE MIS proxy failed");
+
+      const rows = Array.isArray(json.rows) ? json.rows : Array.isArray(json.data) ? json.data : [];
+      const requested = new Set(normalizedSymbols);
+      const seen = new Set();
+      const filteredRows = rows
+        .filter(Boolean)
+        .filter((row) => requested.has(normalizeStockSymbol(row.symbol || row.stock_id || row.c)))
+        .filter((row) => getTwseMisUsablePrice(row) !== null || row.volume !== null || row.tradetime)
+        .filter((row) => {
+          const symbol = normalizeStockSymbol(row.symbol || row.stock_id || row.c);
+          if (seen.has(symbol)) return false;
+          seen.add(symbol);
+          return true;
+        });
+
+      bestRows = chooseBetterTwseMisRows(bestRows, filteredRows, normalizedSymbols);
+      bestJson = json;
+
+      if (!shouldRetryTwseMisRows(filteredRows, normalizedSymbols)) break;
+      if (attempt < attempts) await sleep(450 * attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await sleep(450 * attempt);
+    }
+  }
+
+  if (!bestJson && lastError) throw lastError;
+
+  const summary = summarizeTwseMisRows(bestRows, normalizedSymbols);
+  bestRows.sourceRuntime = buildApiSourceRuntime({
     source: "twse_mis",
-    json,
-    dataTime: pickTwseMisDataTime(json, filteredRows),
-    count: filteredRows.length,
-    note: json?.marketIndex?.tradetime ? `大盤 ${compactSourceTime(json.marketIndex.tradetime)}` : "",
+    json: bestJson || {},
+    dataTime: pickTwseMisDataTime(bestJson || {}, bestRows),
+    count: bestRows.length,
+    note: [
+      bestJson?.marketIndex?.tradetime ? `大盤 ${compactSourceTime(bestJson.marketIndex.tradetime)}` : "",
+      summary.priceMissingSymbols.length ? `MIS price待補 ${summary.priceMissingSymbols.join(",")}` : "",
+    ].filter(Boolean).join("；"),
   });
-  return filteredRows;
+  return bestRows;
 }
 
 
@@ -599,8 +666,13 @@ function isPreOpenValidationStatus(status) {
 }
 
 function validationStatusClassForDisplay(status) {
-  if (isPreOpenValidationStatus(status)) return "bg-sky-100 text-sky-800";
-  return validationStatusClass(status);
+  const label = String(status || "");
+  if (isPreOpenValidationStatus(label)) return "bg-sky-100 text-sky-800";
+  if (label.includes("日期")) return "bg-blue-100 text-blue-800";
+  if (label.includes("參考")) return "bg-indigo-100 text-indigo-800";
+  if (label.includes("已補") || label.includes("接入")) return "bg-sky-100 text-sky-800";
+  if (label.includes("不比對")) return "bg-slate-100 text-slate-700";
+  return validationStatusClass(label);
 }
 
 function validationDiffTextForDisplay(row) {
@@ -622,16 +694,116 @@ function hasPreOpenValidationRow(rows = []) {
   return rows.some((row) => isPreOpenValidationStatus(row?.status));
 }
 
+const VALIDATION_DISPLAY_NEUTRAL_KEYWORDS = ["通過", "日期", "參考", "已補", "接入", "不比對"];
+const VALIDATION_DISPLAY_HARD_KEYWORDS = ["資料異常", "差異偏大", "需查", "需檢查"];
+const VALIDATION_CRITICAL_MISSING_LABEL_KEYWORDS = [
+  "現價",
+  "昨收",
+  "成交量 volume",
+  "TWSE MIS",
+  "收盤價",
+  "開盤價",
+  "最高價",
+  "最低價",
+  "均量",
+  "MA",
+  "RSI",
+  "MACD",
+  "KD",
+  "ATR",
+  "priceRowCount",
+];
+
+function includesAnyText(value, keywords = []) {
+  const text = String(value || "");
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function hasDisplayValue(value) {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function isReferenceOrNeutralValidationStatus(status) {
+  const label = String(status || "");
+  return includesAnyText(label, VALIDATION_DISPLAY_NEUTRAL_KEYWORDS) || isPreOpenValidationStatus(label);
+}
+
+function isCriticalMissingValidationRow(row) {
+  const status = String(row?.status || "");
+  if (!status.includes("缺")) return false;
+  if (includesAnyText(row?.compareSource, ["尚無比對來源", "不比對"])) return false;
+  if (includesAnyText(row?.currentSource, ["尚無比對來源"])) return false;
+  if (hasDisplayValue(row?.finmindValue)) return false;
+  return includesAnyText(row?.label, VALIDATION_CRITICAL_MISSING_LABEL_KEYWORDS);
+}
+
+function isHardValidationIssueForDisplay(row) {
+  const status = String(row?.status || "");
+  if (!status || isReferenceOrNeutralValidationStatus(status)) return false;
+  if (status.includes("缺")) return isCriticalMissingValidationRow(row);
+  return includesAnyText(status, VALIDATION_DISPLAY_HARD_KEYWORDS);
+}
+
 function getValidationStateForDisplay(rows = []) {
   const state = getValidationState(rows);
-  if (hasPreOpenValidationRow(rows) && state.failed === 0 && state.missing === 0) {
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  const hardRows = list.filter(isHardValidationIssueForDisplay);
+  const hardMissing = hardRows.filter((row) => String(row?.status || "").includes("缺")).length;
+  const hardFailed = Math.max(0, hardRows.length - hardMissing);
+  const hasDateMismatch = list.some((row) => String(row?.status || "").includes("日期"));
+  const hasReferenceDiff = list.some((row) => String(row?.status || "").includes("參考"));
+  const hasSupplemented = list.some((row) => String(row?.status || "").includes("已補") || String(row?.status || "").includes("接入"));
+  const softPassed = Math.max(0, list.length - hardRows.length);
+
+  if (hasPreOpenValidationRow(list) && hardFailed === 0 && hardMissing === 0) {
     return {
       ...state,
       label: TWSE_PREOPEN_STATUS,
       tone: "bg-sky-100 text-sky-800",
+      passed: softPassed,
+      failed: 0,
+      missing: 0,
     };
   }
-  return state;
+
+  if (hardFailed === 0 && hardMissing === 0) {
+    if (hasDateMismatch) {
+      return {
+        ...state,
+        label: "日期未對齊",
+        tone: "bg-blue-100 text-blue-800",
+        passed: softPassed,
+        failed: 0,
+        missing: 0,
+      };
+    }
+    if (hasReferenceDiff) {
+      return {
+        ...state,
+        label: "參考差異",
+        tone: "bg-indigo-100 text-indigo-800",
+        passed: softPassed,
+        failed: 0,
+        missing: 0,
+      };
+    }
+    if (hasSupplemented) {
+      return {
+        ...state,
+        label: "通過",
+        tone: "bg-emerald-100 text-emerald-800",
+        passed: softPassed,
+        failed: 0,
+        missing: 0,
+      };
+    }
+  }
+
+  return {
+    ...state,
+    failed: hardFailed || state.failed,
+    missing: hardMissing || state.missing,
+  };
 }
 
 function validationSummaryForDisplay(rows = []) {
@@ -1111,6 +1283,7 @@ function getValidationCompactLabel(validationState) {
   if (label.includes("盤前")) return TWSE_PREOPEN_STATUS;
   if (label.includes("通過")) return "通過";
   if (label.includes("日期")) return "日期未對齊";
+  if (label.includes("參考")) return "參考差異";
   if (label.includes("需查") || label.includes("需")) return "需查";
   if (label.includes("缺")) return "缺資料";
   if (label.includes("已補")) return "已補值";
@@ -1120,8 +1293,6 @@ function getValidationCompactLabel(validationState) {
 }
 
 function getValidationCompactTone(validationState) {
-  // Reuse the exact validation status color mapping from the debug validation table.
-  // This is UI-only: it does not change validation logic, source comparison, or scoring.
   return validationStatusClassForDisplay(getValidationCompactLabel(validationState));
 }
 
@@ -1143,6 +1314,12 @@ function getValidationProductMeta(validationState) {
     return {
       pill: "border border-blue-200/85 bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(219,234,254,0.86)_100%)] text-blue-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_4px_10px_rgba(59,130,246,0.11)]",
       dot: "bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.14)]",
+    };
+  }
+  if (label.includes("參考")) {
+    return {
+      pill: "border border-indigo-200/85 bg-[linear-gradient(180deg,rgba(238,242,255,0.98)_0%,rgba(224,231,255,0.86)_100%)] text-indigo-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_4px_10px_rgba(99,102,241,0.11)]",
+      dot: "bg-indigo-500 shadow-[0_0_0_3px_rgba(99,102,241,0.14)]",
     };
   }
   if (label.includes("需查")) {
@@ -1406,20 +1583,20 @@ function ScoreRing({ score, pending = false }) {
 
 function AddAssetForm({ value, onChange, onAdd, error }) {
   return (
-    <Card className="mx-auto max-w-[840px] rounded-2xl border-slate-200/80 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.07)] backdrop-blur">
-      <CardContent className="p-1.5 md:p-3">
+    <Card className="mx-auto max-w-6xl rounded-xl border-slate-200/80 bg-white/95 shadow-[0_10px_22px_rgba(15,23,42,0.06)] backdrop-blur md:rounded-2xl md:shadow-[0_12px_28px_rgba(15,23,42,0.07)]">
+      <CardContent className="p-1 md:p-3">
         <div className="flex w-full min-w-0 flex-nowrap items-center gap-1 md:gap-2">
           <Input
             placeholder="代號"
             value={value.symbol}
             onChange={(e) => onChange({ ...value, symbol: e.target.value })}
-            className="h-8 min-w-0 flex-1 px-2 text-[12px] md:h-10 md:w-[104px] md:flex-none md:text-[14px]"
+            className="!h-8 min-w-0 flex-1 px-2 text-[12px] md:!h-10 md:text-[14px]"
           />
           <Input
             placeholder="名稱可選填"
             value={value.name}
             onChange={(e) => onChange({ ...value, name: e.target.value })}
-            className="hidden h-10 min-w-0 flex-1 text-[14px] md:block"
+            className="hidden !h-10 min-w-0 flex-1 text-[14px] md:block"
           />
           <select className="h-8 w-[58px] shrink-0 rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[12px] outline-none focus:ring-2 focus:ring-slate-300 md:h-10 md:w-[90px] md:px-2 md:py-1.5 md:text-[14px]" value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value })}>
             <option value="股票">股票</option>
@@ -1429,7 +1606,7 @@ function AddAssetForm({ value, onChange, onAdd, error }) {
             <option value="TWSE">TWSE</option>
             <option value="TPEx">TPEx</option>
           </select>
-          <Button onClick={onAdd} className="h-8 w-[42px] shrink-0 px-0 text-[12px] font-black leading-none md:h-10 md:w-[64px] md:text-[14px]">加入</Button>
+          <Button onClick={onAdd} className="!h-8 w-[48px] shrink-0 whitespace-nowrap px-0 text-[12px] font-black leading-none md:!h-10 md:w-[64px] md:text-[14px]">加入</Button>
         </div>
         {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
       </CardContent>
@@ -2616,6 +2793,30 @@ function twseMisRowsHaveNewTradeTime(rows = [], latestMap = {}) {
   });
 }
 
+function twseMisRowsHaveQuoteImprovement(rows = [], currentStocks = []) {
+  const currentBySymbol = new Map(
+    (Array.isArray(currentStocks) ? currentStocks : [])
+      .map((stock) => [normalizeStockSymbol(stock?.symbol), stock])
+      .filter(([symbol]) => symbol)
+  );
+
+  return rows.some((row) => {
+    const symbol = normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c);
+    if (!symbol) return false;
+    const current = currentBySymbol.get(symbol) || {};
+
+    const incomingPrice = getTwseMisUsablePrice(row);
+    const currentPrice = parseNum(current.price, null);
+    if (incomingPrice !== null && !(currentPrice !== null && currentPrice > 0)) return true;
+
+    const incomingVolume = parseNum(row?.volume, null);
+    const currentVolume = parseNum(current.volume, null);
+    if (incomingVolume !== null && incomingVolume > 0 && !(currentVolume !== null && currentVolume > 0)) return true;
+
+    return false;
+  });
+}
+
 function updateTwseMisLatestTradeTime(rows = [], latestRef) {
   if (!latestRef?.current) return;
   rows.forEach((row) => {
@@ -3418,11 +3619,12 @@ export default function StockShortV1App() {
       const rows = await fetchTwseMisRows(requestSymbols, policy.timeoutMs, apiConfig.twseMisProxyUrl || DEFAULT_TWSE_MIS_PROXY_URL);
       if (rows.sourceRuntime) recordSourceRuntime(source, rows.sourceRuntime);
       const hasNewTradeTime = twseMisRowsHaveNewTradeTime(rows, twseMisLatestTradeTimeRef.current);
+      const hasQuoteImprovement = twseMisRowsHaveQuoteImprovement(rows, stocks);
       const timePreview = rows.slice(0, 3).map((row) => `${row.symbol}:${row.tradetime || "-"}`).join(" / ");
 
       setLastFetchMap((prev) => markSourceFetched(prev, source));
 
-      if (auto && !hasNewTradeTime) {
+      if (auto && !hasNewTradeTime && !hasQuoteImprovement) {
         if (!silent) setApiMessage(`TWSE MIS 無新行情${timePreview ? `（${timePreview}）` : ""}`);
         return { ok: true, skipped: true, reason: "same_tradetime", count: rows.length };
       }
@@ -3452,11 +3654,11 @@ export default function StockShortV1App() {
       }
 
       if (silent) {
-        if (hasNewTradeTime) setApiMessage(`行情自動刷新｜${timePreview || `${rows.length} 檔`}${officialEtfNote}`);
+        if (hasNewTradeTime || hasQuoteImprovement) setApiMessage(`行情自動刷新｜${timePreview || `${rows.length} 檔`}${hasQuoteImprovement && !hasNewTradeTime ? "｜補齊缺漏價量" : ""}${officialEtfNote}`);
       } else {
         setApiMessage(`盤中價量成功：${rows.length} 檔；已更新主畫面 price / volume${timePreview ? `（${timePreview}）` : ""}${officialEtfNote}`);
       }
-      return { ok: true, count: rows.length, hasNewTradeTime, officialEtfNote };
+      return { ok: true, count: rows.length, hasNewTradeTime, hasQuoteImprovement, officialEtfNote };
     } catch (error) {
       if (!silent) setApiMessage(`TWSE MIS 成交量參考失敗：${error.message}`);
       return { ok: false, error: error.message };
