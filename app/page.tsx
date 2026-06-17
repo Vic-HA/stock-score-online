@@ -40,23 +40,14 @@ import {
   getSourceName,
   compareSourceValue,
   pickCompare,
-  getYahooCandidateRows,
-  getYahooCompareRow,
   pickYahooAlignedCompare,
   yahooAlignedCompareOptions,
   normalizePercentCompareValue,
-  sanitizePercentPointFromVerifiedSource,
-  sanitizeVixPercentPointFromVerifiedSource,
   reconcileVixPercentPointWithReference,
   normalizeValidationDate,
   sourceDateCompareOptions,
   getValidationState,
   validationSummary,
-  validationGroupOf,
-  validationActionTagOf,
-  validationRoleOf,
-  validationSortKey,
-  enrichValidationRow,
   validationStatusClass,
   validationDiffText,
   validationToleranceText,
@@ -67,9 +58,7 @@ import {
   attachValidationDateLabels,
 } from "@/lib/validationRows";
 import {
-  volumeRatioBaseDisplayLabel,
   volumeRatioRuntimeSourceLabel,
-  volumeBaseShortDisplayLabel,
 } from "@/lib/volumeLabels";
 import {
   formatDurationMs,
@@ -83,7 +72,6 @@ import {
   pickEtfInavDataTime,
 } from "@/lib/sourceRuntime";
 import {
-  SOURCE_REFRESH_POLICY,
   OFFICIAL_SCHEDULED_CHECK_INTERVAL_MS,
   DEFAULT_FETCH_TIMEOUT_MS,
   getScheduledOfficialCacheSlot,
@@ -96,21 +84,14 @@ import {
   createAssetTemplate,
   parseNum,
   normalizeStockSymbol,
-  shouldReplaceName,
   normalizeExternalStock,
   normalizeTwseStockDayRow,
   normalizeTwseBwibbuRow,
   mergeTwseRows,
-  normalizeTwseMisItem,
   mergeTwseMisBySymbol,
-  buildTwseMisChannels,
-  applyDefinedNumber,
   parseGoogleTradeTimeMs,
   isTwseMisAutoWindow,
-  isGoogleIntradayQuoteReady,
-  isTwseMisIntradayQuoteReady,
   getIntradayQuoteReadiness,
-  shouldGoogleUpdateMainQuote,
   normalizeSourceRowsForValidation,
   mergeSourceMap,
   fillNamesFromValidationMap,
@@ -131,8 +112,6 @@ import {
   pct,
   number,
   compactNumber,
-  compactRatio,
-  compactDecimal,
   getDerived,
   scoreShortV1,
   scoreMidV1,
@@ -144,9 +123,9 @@ function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-function Card({ className = "", children }) {
+function Card({ className = "", children, ...props }) {
   const hasOwnBg = /(^|\s)!?bg-/.test(className);
-  return <div className={cx("border", hasOwnBg ? "" : "bg-white", className)}>{children}</div>;
+  return <div {...props} className={cx("border", hasOwnBg ? "" : "bg-white", className)}>{children}</div>;
 }
 
 function CardContent({ className = "", children }) {
@@ -248,26 +227,10 @@ const DEFAULT_TWSE_MIS_PROXY_URL = "/api/twse/mis";
 const DEFAULT_YAHOO_OHLCV_PROXY_URL = "/api/yahoo/ohlcv";
 const DEFAULT_YAHOO_ETF_PROXY_URL = "/api/yahoo/etf";
 const DEFAULT_ETF_INAV_PROXY_URL = "/api/etf/inav";
-const TWSE_STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
-const TWSE_BWIBBU_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL";
-const CORS_PROXY_RAW_URL = "https://api.allorigins.win/raw?url=";
 const initialStocks = [
   createAssetTemplate({ symbol: "2330", name: "台積電", type: "股票", market: "TWSE" }),
   createAssetTemplate({ symbol: "0050", name: "元大台灣50", type: "ETF", market: "TWSE" }),
 ];
-
-function getSourceConnectorPlan(config) {
-  return [
-    { name: "FinMind API", role: "TWSE snapshot 驗證 / 籌碼基本面", status: config.finmindProxyUrl ? "可測試" : "待接 proxy", fields: "OHLCV / 技術驗證、PER/PBR/殖利率比對、三大法人、融資融券、月營收、財報、資產負債", method: "前端呼叫自己的 proxy，不直接放 FinMind token；Daily 主要作 TWSE snapshot 自算技術欄位的驗證 / 備援，法人、融資融券與基本面仍由 FinMind 補。TaiwanStockPER 僅作比對。" },
-    { name: "GoogleFinance", role: "選填驗證參考", status: config.googleCsvUrl ? "可測試" : "未啟用也可運作", fields: "price、prevClose、volume、PER、EPS、Nasdaq、SOX、VIX、tradetime、updatedAt；全部只作參考 / 驗證", method: "Google Sheet URL 改為 optional。App 主資料已收斂到 TWSE MIS / TWSE OpenAPI / TWSE Snapshot / FinMind；Google 僅作盤中參考差異與外部 sanity check，不覆蓋主價量、不參與日線技術、不作 EPS / 估值主口徑。" },
-    { name: "TWSE OpenAPI", role: "官方盤後 / 官方校正", status: config.twseProxyUrl ? "可測試" : "需 proxy", fields: "官方 price、prevClose、volume、PER、PBR、殖利率", method: "預設走 /api/twse/stocks proxy；免費免 token，作官方盤後校正與估值基準。盤中不拿 TWSE 硬比 GoogleFinance 即時口徑。" },
-    { name: "TWSE Snapshot", role: "本機日線 / 自算技術主資料", status: config.twseHistoryProxyUrl ? "可測試" : "待接 route", fields: "daily OHLCV、avgVolume10/20、MA5/20/60、RSI、MACD、KD、ATR、20日高低點、20/60日報酬", method: "預設走 /api/twse/history snapshot-first；主技術與量能基準優先用 TWSE STOCK_DAY snapshot 自算，FinMind 驗證 / 備援，Google 降級為參考。" },
-    { name: "TWSE MIS", role: "盤中 price / volume 主來源候選", status: "可手動測試", fields: "price / displayPrice / quoteMidPrice / prevClose / volume / tradetime / quoteAgeSec / navUrl", method: "前端手動讀取 Next.js TWSE MIS route；更新主畫面 price / volume，GoogleFinance 保留輔助比對；短線分數公式暫不改。" },
-    { name: "Yahoo OHLCV", role: "外部 raw OHLCV 抽樣驗證", status: config.yahooOhlcvProxyUrl ? "可驗證" : "待接 proxy", fields: "Open / High / Low / Close、MACD / KD / ATR 同公式重算結果", method: "呼叫 /api/yahoo/ohlcv；只作外部 raw OHLCV 抽樣與技術指標同公式重算驗證，不覆蓋 FinMind 主技術資料、不參與分數。日期不同時只顯示外部值並標示不比對。" },
-    { name: "ETF 即時估值", role: "ETF 折溢價主資料", status: config.etfInavProxyUrl ? "可測試" : "待接 proxy", fields: "即時估值、市價、折溢價、前日淨值/市價", method: "呼叫 /api/etf/inav；更新 ETF 小卡與驗證表，不參與短線分數。" },
-    { name: "ETF 備援", role: "ETF 備援輔助資料", status: config.yahooEtfProxyUrl ? "可測試" : "待接 proxy", fields: "ETF 市價、漲跌、漲跌幅、區間高低、區間差、折溢價%", method: "僅作備援輔助；不覆蓋主行情、不參與股票或 ETF 短線分數。" },
-  ];
-}
 
 const finmindAspectPlan = [
   {
@@ -397,9 +360,6 @@ function displayValue(value) {
   const n = Number(value);
   return Number.isFinite(n) ? number(n) : "-";
 }
-
-
-
 
 
 async function fetchJsonViaCorsProxy(url, timeoutMs) {
@@ -989,7 +949,6 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
 }
 
 
-
 function getShortRecommendation(total, stopLoss) {
   if (stopLoss?.quotePending) return { label: "等待盤中價", tone: "bg-slate-100 text-slate-700" };
   if (stopLoss?.triggered) return { label: "停損警示 / 不追價", tone: "bg-red-100 text-red-800" };
@@ -1151,10 +1110,6 @@ function getShortV1Analysis(result) {
   return parts.join(" ");
 }
 
-function getFrameworkAnalysis(horizon, result) {
-  return `${horizon} V1 目前是資料架構版，已列入 Google / TWSE / FinMind 多來源欄位，共 ${result.rows.length} 項資料檢查，其中 ${result.rows.filter((row) => row.score === 1).length} 項資料可用。此頁用來確認 API 欄位是否可抓，尚未完成正式投資分數校準。`;
-}
-
 function getMidV1Analysis(stock, result) {
   const ready = result.rows.filter((row) => row.score === 1).length;
   const parts = [`${stock.symbol} ${stock.name} 的中線 V1 目前尚未啟用正式分數。`];
@@ -1216,167 +1171,152 @@ function getScoreTone(score) {
   return { badge: "bg-rose-100/95 text-rose-800", bar: "bg-[linear-gradient(90deg,#fda4af_0%,#fb7185_38%,#ef4444_72%,#dc2626_100%)]", track: "bg-[linear-gradient(90deg,rgba(ffe4e6,0.55)_0%,rgba(255,241,242,0.92)_100%)]", card: "border-rose-200/85 bg-rose-50/52", text: "text-rose-800", ring: "ring-rose-100" };
 }
 
+const DESKTOP_SCORE_RING_SIZE = 56;
+const DESKTOP_SCORE_RING_VIEWBOX = 44;
+const DESKTOP_SCORE_RING_RADIUS = 17;
+const DESKTOP_SCORE_RING_STROKE = 3.2;
+
+// Desktop score ring only. Mobile cards use the separate short-score mini line.
 function getScoreRingStyle(score) {
   const value = clamp(Number(score) || 0, 0, 100);
-  let colorStart = "#fda4af";
-  let colorEnd = "#ef4444";
-  let soft = "#fee2e2";
-  let text = "#991b1b";
-  let glow = "rgba(239,68,68,0.18)";
-  if (value >= 85) {
-    colorStart = "#6ee7b7";
-    colorEnd = "#10b981";
-    soft = "#d1fae5";
-    text = "#065f46";
-    glow = "rgba(16,185,129,0.18)";
-  } else if (value >= 70) {
-    colorStart = "#d9f99d";
-    colorEnd = "#84cc16";
-    soft = "#ecfccb";
-    text = "#3f6212";
-    glow = "rgba(132,204,22,0.18)";
-  } else if (value >= 55) {
-    colorStart = "#fde68a";
-    colorEnd = "#eab308";
-    soft = "#fef3c7";
-    text = "#92400e";
-    glow = "rgba(242,201,76,0.22)";
-  } else if (value >= 40) {
-    colorStart = "#fdba74";
-    colorEnd = "#f97316";
-    soft = "#ffedd5";
-    text = "#9a3412";
-    glow = "rgba(249,115,22,0.18)";
-  }
-  return {
-    soft,
-    text,
-    glow,
-    background: `conic-gradient(from -90deg, ${colorStart} 0deg, ${colorEnd} ${Math.max(value * 3.6 - 10, 0)}deg, ${soft} ${value * 3.6}deg, #e8edf4 ${value * 3.6}deg, #f8fafc 360deg)`,
-  };
+  if (value >= 85) return { start: "#10b981", end: "#bbf7d0", track: "rgba(209,250,229,0.58)", text: "#065f46", fill: "rgba(236,253,245,0.90)" };
+  if (value >= 70) return { start: "#84cc16", end: "#ecfccb", track: "rgba(236,252,203,0.62)", text: "#3f6212", fill: "rgba(247,254,231,0.90)" };
+  if (value >= 55) return { start: "#eab308", end: "#fef3c7", track: "rgba(254,243,199,0.66)", text: "#92400e", fill: "rgba(255,251,235,0.92)" };
+  if (value >= 40) return { start: "#f97316", end: "#ffedd5", track: "rgba(255,237,213,0.68)", text: "#9a3412", fill: "rgba(255,247,237,0.92)" };
+  return { start: "#ef4444", end: "#ffe4e6", track: "rgba(254,226,226,0.68)", text: "#991b1b", fill: "rgba(255,241,242,0.92)" };
+}
+
+function hexToRgb(hex) {
+  const normalized = hex.replace("#", "");
+  const safe = normalized.length === 3 ? normalized.split("").map((ch) => ch + ch).join("") : normalized;
+  const value = Number.parseInt(safe, 16);
+  return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+
+function mixHexColor(a, b, t) {
+  const colorA = hexToRgb(a);
+  const colorB = hexToRgb(b);
+  const ratio = clamp(t, 0, 1);
+  const r = Math.round(colorA.r + (colorB.r - colorA.r) * ratio);
+  const g = Math.round(colorA.g + (colorB.g - colorA.g) * ratio);
+  const bValue = Math.round(colorA.b + (colorB.b - colorA.b) * ratio);
+  return `rgb(${r}, ${g}, ${bValue})`;
 }
 
 function ScoreRing({ score, pending = false }) {
+  const raw = Number(score) || 0;
+  const value = clamp(raw, 0, 100);
+  const ring = getScoreRingStyle(value);
+  const gradientId = React.useId().replace(/:/g, "");
+  const circumference = 2 * Math.PI * DESKTOP_SCORE_RING_RADIUS;
+  const progressLength = circumference * (value / 100);
+  const arcSegmentCount = 20;
+  const arcGap = 0.16;
+  const totalGap = arcGap * Math.max(0, arcSegmentCount - 1);
+  const unitLength = Math.max(0.1, (progressLength - totalGap) / arcSegmentCount);
+  const activeSegmentCount = Math.max(1, Math.min(arcSegmentCount, Math.round(progressLength / (unitLength + arcGap))));
+  const arcRotation = -90;
+
   if (pending) {
     return (
-      <div className="grid h-[60px] w-[60px] place-items-center rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.98)_0%,rgba(241,245,249,0.98)_100%)] text-[13px] font-black text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.78)] ring-1 ring-slate-200 md:h-[66px] md:w-[66px]">
-        待
-      </div>
+      <svg
+        width={DESKTOP_SCORE_RING_SIZE}
+        height={DESKTOP_SCORE_RING_SIZE}
+        viewBox={`0 0 ${DESKTOP_SCORE_RING_VIEWBOX} ${DESKTOP_SCORE_RING_VIEWBOX}`}
+        className="block h-[56px] w-[56px] shrink-0 overflow-visible"
+        aria-label="觀察分數待即時"
+        title="觀察分數待即時"
+      >
+        <defs>
+          <filter id={`${gradientId}-pending-shadow`} x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="1.5" stdDeviation="1.8" floodColor="rgba(148,163,184,0.14)" />
+          </filter>
+        </defs>
+        <circle cx="22" cy="22" r={DESKTOP_SCORE_RING_RADIUS + 2.6} fill="rgba(255,255,255,0.56)" />
+        <circle cx="22" cy="22" r={DESKTOP_SCORE_RING_RADIUS} fill="rgba(250,251,252,0.96)" stroke="rgba(203,213,225,0.60)" strokeWidth={DESKTOP_SCORE_RING_STROKE} filter={`url(#${gradientId}-pending-shadow)`} />
+        <circle cx="22" cy="22" r="11" fill="rgba(255,255,255,0.90)" />
+        <text x="22" y="22" textAnchor="middle" dominantBaseline="central" className="fill-slate-500 text-[10px] font-black">待</text>
+      </svg>
     );
   }
-  const ring = getScoreRingStyle(score);
+
   return (
-    <div
-      className="grid h-[58px] w-[58px] place-items-center rounded-full p-[5px] md:h-[64px] md:w-[64px] md:p-[6px]"
-      style={{
-        background: ring.background,
-        boxShadow: `0 0 0 2px rgba(255,255,255,0.74), 0 12px 26px ${ring.glow}, 0 7px 14px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.72), inset 0 -1px 0 rgba(15,23,42,0.04)`,
-      }}
-      aria-label={`觀察分數 ${Math.round(Number(score) || 0)}`}
-      title={`觀察分數 ${Math.round(Number(score) || 0)}`}
+    <svg
+      width={DESKTOP_SCORE_RING_SIZE}
+      height={DESKTOP_SCORE_RING_SIZE}
+      viewBox={`0 0 ${DESKTOP_SCORE_RING_VIEWBOX} ${DESKTOP_SCORE_RING_VIEWBOX}`}
+      className="block h-[56px] w-[56px] shrink-0 overflow-visible"
+      aria-label={`觀察分數 ${Math.round(raw)}`}
+      title={`觀察分數 ${Math.round(raw)}`}
     >
-      <div className="relative grid h-full w-full place-items-center rounded-full border border-white/90 bg-[radial-gradient(circle_at_30%_28%,rgba(255,255,255,1)_0%,rgba(255,255,255,0.99)_35%,rgba(248,250,252,1)_100%)] shadow-[inset_0_1px_2px_rgba(15,23,42,0.05),0_1px_3px_rgba(15,23,42,0.03)]">
-        <span className="pointer-events-none absolute inset-[10px] rounded-full bg-white/52 blur-[5px]" />
-        <span className="relative z-10 text-[19px] font-black tabular-nums leading-none tracking-[-0.02em] md:text-[22px]" style={{ color: ring.text }}>
-          {Math.round(Number(score) || 0)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ScoreBadge({ score, pending = false }) {
-  if (pending) return <Badge className="bg-slate-100 text-slate-700 text-sm px-3 py-1">待即時</Badge>;
-  const tone = getScoreTone(score);
-  return <Badge className={cx("text-sm px-3 py-1", tone.badge)}>{Math.round(score)}</Badge>;
-}
-
-function ScoreBar({ label, score }) {
-  const tone = getScoreTone(score);
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-[15px]">
-        <span className="text-slate-600">{label}</span>
-        <span className={`inline-flex min-w-[44px] items-center justify-center rounded-full px-2.5 py-1 text-sm font-bold ${tone.badge}`}>{Math.round(score)}</span>
-      </div>
-      <div className={`h-2 overflow-hidden rounded-full ${tone.track}`}>
-        <div className={`h-full rounded-full transition-all duration-500 ${tone.bar}`} style={{ width: `${clamp(score)}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function DimensionScoreCard({ dim }) {
-  const hasScore = dim.weight > 0;
-  const tone = getScoreTone(hasScore ? dim.scorePct : dim.pass === dim.dataCount ? 85 : dim.pass > 0 ? 60 : 30);
-  return (
-    <Card className={`rounded-xl border shadow-sm ring-2 ${tone.card} ${tone.ring}`}>
-      <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className={`text-lg font-bold ${tone.text}`}>{dim.dimension}</div>
-          {hasScore ? <Badge className={tone.badge}>{Math.round(dim.scorePct)}</Badge> : <Badge className="bg-blue-100 text-blue-800">資料</Badge>}
-        </div>
-        {hasScore ? <ScoreBar label="面向分數" score={dim.scorePct} /> : <div className="rounded-xl bg-white/70 p-3 text-[15px] text-slate-600">資料確認：<span className="font-bold text-slate-900">{dim.pass}/{dim.dataCount}</span> 項可用</div>}
-        <div className="text-[15px] text-slate-600">權重 {dim.weight.toFixed(2)}，加權得分 {dim.points.toFixed(2)}</div>
-      </CardContent>
-    </Card>
+      <defs>
+        <filter id={`${gradientId}-ring-shadow`} x="-42%" y="-42%" width="184%" height="184%">
+          <feDropShadow dx="0" dy="1.3" stdDeviation="1.45" floodColor="rgba(15,23,42,0.05)" />
+        </filter>
+      </defs>
+      <circle cx="22" cy="22" r={DESKTOP_SCORE_RING_RADIUS + 2.7} fill="rgba(255,255,255,0.54)" />
+      <circle cx="22" cy="22" r={DESKTOP_SCORE_RING_RADIUS} fill="rgba(255,255,255,0.88)" stroke="rgba(255,255,255,0.82)" strokeWidth="1" />
+      <circle cx="22" cy="22" r={DESKTOP_SCORE_RING_RADIUS} fill="none" stroke={ring.track} strokeWidth={DESKTOP_SCORE_RING_STROKE} />
+      {Array.from({ length: activeSegmentCount }).map((_, index) => {
+        const t = activeSegmentCount <= 1 ? 1 : index / (activeSegmentCount - 1);
+        const stroke = mixHexColor(ring.start, ring.end, t);
+        const dashOffset = -(index * (unitLength + arcGap));
+        const opacity = 1 - 0.32 * t;
+        return (
+          <circle
+            key={`${gradientId}-seg-${index}`}
+            cx="22"
+            cy="22"
+            r={DESKTOP_SCORE_RING_RADIUS}
+            fill="none"
+            stroke={stroke}
+            strokeOpacity={opacity}
+            strokeWidth={DESKTOP_SCORE_RING_STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${unitLength} ${circumference - unitLength}`}
+            strokeDashoffset={dashOffset}
+            transform={`rotate(${arcRotation} 22 22)`}
+            filter={index === 0 ? `url(#${gradientId}-ring-shadow)` : undefined}
+          />
+        );
+      })}
+      <circle cx="22" cy="22" r="11" fill="rgba(255,255,255,0.94)" />
+      <circle cx="22" cy="22" r="11" fill="none" stroke="rgba(255,255,255,0.80)" strokeWidth="0.75" />
+      <text x="22" y="22" textAnchor="middle" dominantBaseline="central" style={{ fill: ring.text }} className="text-[14px] font-black tabular-nums tracking-[-0.02em]">
+        {Math.round(raw)}
+      </text>
+    </svg>
   );
 }
 
 function AddAssetForm({ value, onChange, onAdd, error }) {
   return (
-    <Card className="rounded-2xl border-slate-200/80 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.07)] backdrop-blur">
-      <CardContent className="p-3 md:p-3.5">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-[170px_minmax(220px,1fr)_120px_120px]">
-            <Input
-              placeholder="代號，例如 2330"
-              value={value.symbol}
-              onChange={(e) => onChange({ ...value, symbol: e.target.value })}
-              className="h-11 text-base md:text-[15px]"
-            />
-            <Input
-              placeholder="名稱可選填"
-              value={value.name}
-              onChange={(e) => onChange({ ...value, name: e.target.value })}
-              className="h-11 text-base md:text-[15px]"
-            />
-            <select className="h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-base outline-none focus:ring-2 focus:ring-slate-300 md:text-[15px]" value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value })}>
-              <option value="股票">股票</option>
-              <option value="ETF">ETF</option>
-            </select>
-            <select className="h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-base outline-none focus:ring-2 focus:ring-slate-300 md:text-[15px]" value={value.market} onChange={(e) => onChange({ ...value, market: e.target.value })}>
-              <option value="TWSE">TWSE</option>
-              <option value="TPEx">TPEx</option>
-            </select>
-          </div>
-          <Button onClick={onAdd} className="h-11 w-full text-base md:w-auto md:px-6">加入</Button>
+    <Card className="mx-auto max-w-[840px] rounded-2xl border-slate-200/80 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.07)] backdrop-blur">
+      <CardContent className="p-1.5 md:p-3">
+        <div className="flex w-full min-w-0 flex-nowrap items-center gap-1 md:gap-2">
+          <Input
+            placeholder="代號"
+            value={value.symbol}
+            onChange={(e) => onChange({ ...value, symbol: e.target.value })}
+            className="h-8 min-w-0 flex-1 px-2 text-[12px] md:h-10 md:w-[104px] md:flex-none md:text-[14px]"
+          />
+          <Input
+            placeholder="名稱可選填"
+            value={value.name}
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+            className="hidden h-10 min-w-0 flex-1 text-[14px] md:block"
+          />
+          <select className="h-8 w-[58px] shrink-0 rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[12px] outline-none focus:ring-2 focus:ring-slate-300 md:h-10 md:w-[90px] md:px-2 md:py-1.5 md:text-[14px]" value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value })}>
+            <option value="股票">股票</option>
+            <option value="ETF">ETF</option>
+          </select>
+          <select className="h-8 w-[66px] shrink-0 rounded-md border border-slate-300 bg-white px-1.5 py-1 text-[12px] outline-none focus:ring-2 focus:ring-slate-300 md:h-10 md:w-[92px] md:px-2 md:py-1.5 md:text-[14px]" value={value.market} onChange={(e) => onChange({ ...value, market: e.target.value })}>
+            <option value="TWSE">TWSE</option>
+            <option value="TPEx">TPEx</option>
+          </select>
+          <Button onClick={onAdd} className="h-8 w-[42px] shrink-0 px-0 text-[12px] font-black leading-none md:h-10 md:w-[64px] md:text-[14px]">加入</Button>
         </div>
         {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function InsightPanel({ insight }) {
-  return (
-    <Card className="rounded-xl shadow-sm">
-      <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold">評語區塊</h3>
-            <p className="text-xs text-slate-500 mt-0.5">點擊總覽表的短線、中線、長線欄位後顯示。</p>
-          </div>
-          {insight && <Badge className={insight.tone}>{insight.badge}</Badge>}
-        </div>
-        {insight ? (
-          <div className="rounded-lg border bg-white p-3 text-[15px] leading-7 text-slate-600">
-            <div className="mb-2 font-semibold text-slate-900">{insight.title}</div>
-            <p>{insight.body}</p>
-          </div>
-        ) : (
-          <div className="rounded-xl border bg-white p-4 text-[15px] text-slate-500">尚未選擇評語。請在總覽表點擊短線、中線或長線。</div>
-        )}
       </CardContent>
     </Card>
   );
@@ -1415,18 +1355,6 @@ function getPriceMove(stock) {
   };
 }
 
-function formatSignedNumber(value, digits = 2) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "-";
-  return `${n > 0 ? "+" : ""}${number(n, digits)}`;
-}
-
-function formatSignedPercent(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "-";
-  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
-}
-
 function formatArrowNumber(value, digits = 2) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "-";
@@ -1443,12 +1371,6 @@ function priceMoveClass(direction) {
   if (direction === "up") return "text-rose-600";
   if (direction === "down") return "text-emerald-600";
   return "text-slate-500";
-}
-
-function getScoreLabel(score) {
-  const value = Number(score);
-  if (!Number.isFinite(value)) return "-";
-  return Math.round(value);
 }
 
 function getDimensionPanelTone(dimension) {
@@ -1483,6 +1405,168 @@ function getDimensionIconMeta(dimension) {
 }
 
 
+function MobileOverviewCards({ rows, selected, onSelect, onInsight, onRemove, dataMode, lastFetchMap = {}, marketIndex = null, selectedDetail = null }) {
+  const refreshTime = formatLastFetch(lastFetchMap, "twse_mis") !== "尚未抓取" ? formatLastFetch(lastFetchMap, "twse_mis") : formatLastFetch(lastFetchMap, "google_csv");
+  const hasMarketIndex = marketIndex?.price !== null && marketIndex?.price !== undefined && Number.isFinite(Number(marketIndex.price));
+  const marketDirection = Number(marketIndex?.change || 0) > 0 || Number(marketIndex?.changePct || 0) > 0 ? "up" : Number(marketIndex?.change || 0) < 0 || Number(marketIndex?.changePct || 0) < 0 ? "down" : "flat";
+  const marketTime = marketIndex?.time ? compactSourceTime(marketIndex.time) : refreshTime;
+
+  return (
+    <div className="space-y-3">
+      <Card
+        className="overflow-hidden rounded-[20px] border-transparent text-white shadow-[0_18px_38px_rgba(15,23,42,0.20)]"
+        style={{ background: "radial-gradient(circle at top left, #355d91 0%, #1c3d68 26%, #0b1930 62%, #040a18 100%)" }}
+      >
+        <CardContent className="relative overflow-hidden p-3">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.02)_30%,rgba(255,255,255,0)_52%)]" />
+          <div className="relative space-y-2.5">
+            <div className="flex items-center justify-between gap-3 text-[11px] font-semibold tracking-[0.02em] text-slate-300">
+              <span>台股大盤</span>
+              <span className="font-medium text-slate-400">更新 {marketTime}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-[28px] font-black leading-none tracking-[-0.025em]">
+                  {hasMarketIndex ? displayValue(marketIndex.price) : "待更新"}
+                </div>
+                <div className="mt-2 flex min-w-0 items-center gap-1.5 text-[12px] text-slate-400">
+                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/6 text-slate-300/85 ring-1 ring-inset ring-white/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+                    <Icon name="close" className="h-3 w-3" />
+                  </span>
+                  <span className="truncate">昨收 {hasMarketIndex && marketIndex.prevClose ? number(marketIndex.prevClose) : "-"}</span>
+                </div>
+              </div>
+              <div className={cx(
+                "flex w-[138px] shrink-0 items-center justify-center gap-2 rounded-2xl border px-2.5 py-2 text-right backdrop-blur-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_10px_22px_rgba(0,0,0,0.12)]",
+                marketDirection === "up" ? "border-rose-300/18 bg-[linear-gradient(180deg,rgba(251,113,133,0.08)_0%,rgba(251,113,133,0.03)_100%)] text-rose-200" : marketDirection === "down" ? "border-emerald-300/18 bg-[linear-gradient(180deg,rgba(52,211,153,0.08)_0%,rgba(52,211,153,0.03)_100%)] text-emerald-200" : "border-white/10 bg-white/5 text-slate-300"
+              )}>
+                {hasMarketIndex ? (
+                  <span className={cx(
+                    "grid h-7 w-7 shrink-0 place-items-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.20),0_4px_10px_rgba(15,23,42,0.10)]",
+                    marketDirection === "up" ? "border-rose-300/26 bg-rose-300/10 text-rose-100" : marketDirection === "down" ? "border-emerald-300/26 bg-emerald-300/10 text-emerald-100" : "border-white/15 bg-white/8 text-slate-200"
+                  )}>
+                    {marketDirection === "up" ? <span className="text-[14px] leading-none">▲</span> : marketDirection === "down" ? <span className="text-[14px] leading-none">▼</span> : <span className="text-[11px] leading-none">▪</span>}
+                  </span>
+                ) : null}
+                <div className="min-w-0">
+                  <div className="truncate text-[26px] font-black leading-none tracking-[-0.025em]">{hasMarketIndex ? formatArrowNumber(marketIndex.change) : "-"}</div>
+                  <div className="mt-1 text-[12px] font-black leading-none text-current/92">{hasMarketIndex ? formatArrowPercent(marketIndex.changePct) : "-"}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-[20px] border-slate-200/80 bg-white/92 shadow-[0_18px_38px_rgba(15,23,42,0.075)] backdrop-blur-sm">
+        <CardContent className="p-3">
+          <div className="mb-2.5">
+            <div className="text-[18px] font-black tracking-[-0.02em] text-slate-950">排行</div>
+            <div className="mt-0.5 text-[12px] leading-5 text-slate-500">依觀察分數排序，點選標的查看詳情；再點一次可收合。</div>
+          </div>
+          <div className="space-y-2.5">
+            {rows.map((row, index) => {
+              const move = getPriceMove(row.stock);
+              const isSelected = selected === row.stock.symbol;
+              const summary = getObservationSummary(row);
+              const dims = getShortDisplayDimensions(row.short.dimensions, row.stock);
+              const ring = getScoreRingStyle(row.short.score100);
+              const rowSurfaceStyle = {
+                background: move.direction === "up"
+                  ? "linear-gradient(90deg, rgba(30,41,59,0.040) 0%, rgba(255,255,255,0.985) 42%, rgba(255, 247, 249, 0.98) 68%, rgba(255, 225, 231, 0.68) 100%)"
+                  : move.direction === "down"
+                    ? "linear-gradient(90deg, rgba(30,41,59,0.040) 0%, rgba(255,255,255,0.985) 44%, rgba(247, 254, 250, 0.96) 72%, rgba(220, 252, 231, 0.50) 100%)"
+                    : "linear-gradient(90deg, rgba(30,41,59,0.030) 0%, rgba(248,250,252,0.96) 44%, rgba(255,255,255,0.99) 100%)",
+              };
+              return (
+                <div key={row.stock.symbol} className="rounded-lg border border-slate-200/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_10px_22px_rgba(15,23,42,0.04)]" style={rowSurfaceStyle}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(row.stock.symbol)}
+                    className="w-full text-left outline-none"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-4 shrink-0 text-center text-[14px] font-black tabular-nums text-slate-300/95">{index + 1}</span>
+                      <span className="inline-flex shrink-0 items-center rounded-md border border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.94)_0%,rgba(241,245,249,0.78)_100%)] px-1.5 py-1 text-[11px] font-black leading-none tracking-[0.08em] text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.68),0_1px_4px_rgba(15,23,42,0.035)]"><span className="tabular-nums">{row.stock.symbol}</span></span>
+                      <span className="min-w-0 flex-1 truncate text-[17px] font-[850] leading-none tracking-[-0.024em] text-slate-900">{row.stock.name}</span>
+                      {isEtfAsset(row.stock) ? <Badge className="shrink-0 self-center bg-blue-50/88 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 ring-1 ring-inset ring-blue-100/90">ETF</Badge> : null}
+                    </div>
+
+                    <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2 rounded-xl bg-white/54 px-2.5 py-1.5" style={{ border: "0", outline: "0", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.84), 0 5px 12px rgba(15,23,42,0.025)" }}>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 ring-1 ring-inset ring-indigo-100/90">
+                          <Icon name="price" className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="shrink-0 tabular-nums text-[16px] font-black tracking-[-0.02em] text-slate-950">{move.price !== null ? number(move.price) : "待即時"}</span>
+                        {move.change !== null ? (
+                          <span className={cx("inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 font-black tabular-nums leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.62)]", move.direction === "up" ? "border-rose-200/80 bg-rose-50/85 text-rose-600" : move.direction === "down" ? "border-emerald-200/80 bg-emerald-50/85 text-emerald-600" : "border-slate-200/80 bg-slate-50/85 text-slate-500")}>
+                            <span style={{ fontSize: 11, lineHeight: "12px" }}>{move.direction === "up" ? "▲" : move.direction === "down" ? "▼" : "▪"}</span>
+                            <span style={{ marginLeft: 3, fontSize: 15, lineHeight: "15px", letterSpacing: "-0.01em" }}>{formatArrowNumber(move.change, 1)}</span>
+                            {move.changePct !== null ? <span style={{ marginLeft: 9, fontSize: 7, lineHeight: "10px", fontWeight: 700, opacity: 0.62 }}>{formatArrowPercent(move.changePct)}</span> : null}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="ml-auto flex shrink-0 items-center justify-end gap-1 text-slate-400">
+                        <Icon name="close" className="h-3 w-3 shrink-0" />
+                        <span className="tabular-nums text-[11px] font-bold tracking-[-0.01em] text-slate-500">{move.prevClose !== null ? number(move.prevClose) : "-"}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex w-full items-center gap-1.5 rounded-full border border-slate-200/80 bg-white/60 px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.62)]">
+                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400 ring-1 ring-inset ring-slate-200/80">
+                        <Icon name="trend" className="h-2.5 w-2.5" />
+                      </span>
+                      <span className="shrink-0 text-[12px] font-black tabular-nums leading-none" style={{ color: ring.text }}>短線 {row.short.quotePending ? "待" : Math.round(Number(row.short.score100) || 0)}</span>
+                      <span className={cx("ml-1 h-[3px] min-w-[72px] flex-1 overflow-hidden rounded-full", getScoreTone(row.short.score100).track)}>
+                        <span className={cx("block h-full rounded-full", getScoreTone(row.short.score100).bar)} style={{ width: `${clamp(row.short.score100)}%` }} />
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] leading-5">
+                      <span className={cx("inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-black leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]", summary.recommendationTone)}>{summary.title}</span>
+                      <span className="min-w-0 text-slate-700">{summary.reason}</span>
+                    </div>
+                    <div className="mt-2.5 flex w-full flex-nowrap gap-1.5">
+                      {dims.map((dim) => {
+                        const dimTone = getScoreTone(dim.scorePct || 0);
+                        const dimMeta = getDimensionIconMeta(dim.dimension);
+                        const dimLabel = String(dim.dimension || "").replace("面", "");
+                        return (
+                          <div key={`${row.stock.symbol}-mobile-${dim.dimension}`} className={cx("min-w-0 flex-1 rounded-lg border px-1.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)]", getDimensionPanelTone(dim.dimension))}>
+                            <div className="flex min-w-0 items-center justify-center gap-1 leading-none">
+                              <span className={cx("inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md", dimMeta.wrap)}>
+                                <Icon name={dimMeta.name} className="h-2.5 w-2.5" />
+                              </span>
+                              <span className={cx("truncate text-[11px] font-black", dimMeta.label)}>{dimLabel}</span>
+                              <span className={cx("text-[12px] font-black tabular-nums", dimTone.text)}>{Math.round(dim.scorePct)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-end gap-1.5 leading-none opacity-80">
+                      <span className="font-medium tracking-[0.02em] text-slate-300/75" style={{ fontSize: 7, lineHeight: "14px" }}>驗證</span>
+                      <div className={cx("inline-flex h-[16px] shrink-0 items-center gap-1 rounded-full border px-2 font-semibold leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]", summary.validationMeta.pill)} style={{ fontSize: 9, lineHeight: "16px" }}>
+                        <span className={cx("grid h-[6px] w-[6px] place-items-center rounded-full border border-white/35", summary.validationMeta.dot)}><span className="h-[2px] w-[2px] rounded-full bg-current/85" /></span>
+                        <span className="tracking-[-0.01em]">{summary.validation}</span>
+                      </div>
+                    </div>
+                  </button>
+                  {isSelected && selectedDetail ? (
+                    <div className="mt-3 border-t border-slate-200/75 pt-3">
+                      {selectedDetail}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode, lastFetchMap = {}, marketIndex = null, selectedDetail = null }) {
   const refreshTime = formatLastFetch(lastFetchMap, "twse_mis") !== "尚未抓取" ? formatLastFetch(lastFetchMap, "twse_mis") : formatLastFetch(lastFetchMap, "google_csv");
   const hasMarketIndex = marketIndex?.price !== null && marketIndex?.price !== undefined && Number.isFinite(Number(marketIndex.price));
@@ -1491,7 +1575,7 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <Card className="overflow-hidden rounded-2xl border-slate-800/70 bg-[radial-gradient(circle_at_top_left,#355d91_0%,#1c3d68_24%,#0b1930_60%,#040a18_100%)] text-white shadow-[0_20px_44px_rgba(15,23,42,0.20)] md:rounded-[22px]">
+      <Card className="overflow-hidden rounded-2xl border-transparent bg-[radial-gradient(circle_at_top_left,#355d91_0%,#1c3d68_24%,#0b1930_60%,#040a18_100%)] text-white shadow-[0_20px_44px_rgba(15,23,42,0.20)] md:rounded-[22px]">
         <CardContent className="relative overflow-hidden p-4 md:p-5">
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.02)_26%,rgba(255,255,255,0)_48%)]" />
           <div className="pointer-events-none absolute -right-10 top-[-24px] h-28 w-40 rounded-full bg-rose-300/8 blur-2xl" />
@@ -1557,17 +1641,20 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
                 const move = getPriceMove(row.stock);
                 const isSelected = selected === row.stock.symbol;
                 const scoreTone = getScoreTone(row.short.score100);
-                const rowSurface = move.direction === "up"
-                  ? (isSelected
-                    ? "bg-[linear-gradient(180deg,rgba(255,241,242,0.98)_0%,rgba(255,255,255,0.98)_58%,rgba(255,244,246,0.96)_100%)] ring-1 ring-inset ring-rose-200/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.80)]"
-                    : "bg-[linear-gradient(180deg,rgba(255,249,250,0.98)_0%,rgba(255,255,255,0.98)_54%,rgba(255,244,246,0.88)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-[1px]")
-                  : move.direction === "down"
-                    ? (isSelected
-                      ? "bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(255,255,255,0.98)_58%,rgba(236,253,245,0.95)_100%)] ring-1 ring-inset ring-emerald-200/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.80)]"
-                      : "bg-[linear-gradient(180deg,rgba(247,254,250,0.98)_0%,rgba(255,255,255,0.98)_54%,rgba(236,253,245,0.86)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-[1px]")
-                    : (isSelected
-                      ? "bg-[linear-gradient(180deg,rgba(239,246,255,0.90)_0%,rgba(255,255,255,0.99)_100%)] ring-1 ring-inset ring-blue-200/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]"
-                      : "bg-[linear-gradient(180deg,rgba(255,255,255,0.99)_0%,rgba(247,250,252,0.92)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-[1px]");
+                const rowSurfaceStyle = {
+                  background: move.direction === "up"
+                    ? "linear-gradient(90deg, rgba(15,23,42,0.043) 0%, rgba(255,255,255,0.985) 42%, rgba(255, 247, 249, 0.97) 68%, rgba(255, 225, 231, 0.64) 100%)"
+                    : move.direction === "down"
+                      ? "linear-gradient(90deg, rgba(15,23,42,0.043) 0%, rgba(255,255,255,0.985) 44%, rgba(247, 254, 250, 0.95) 72%, rgba(220, 252, 231, 0.46) 100%)"
+                      : "linear-gradient(90deg, rgba(15,23,42,0.032) 0%, rgba(248,250,252,0.96) 44%, rgba(255,255,255,0.99) 100%)",
+                };
+                const rowSurfaceChrome = isSelected
+                  ? move.direction === "up"
+                    ? "ring-1 ring-inset ring-rose-200/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.80)]"
+                    : move.direction === "down"
+                      ? "ring-1 ring-inset ring-emerald-200/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.80)]"
+                      : "ring-1 ring-inset ring-blue-200/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]"
+                  : "shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-[1px]";
                 return (
                   <React.Fragment key={row.stock.symbol}>
                     <div
@@ -1576,9 +1663,10 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
                       onClick={() => onSelect(row.stock.symbol)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelect(row.stock.symbol); }}
                       className={cx(
-                        "border-b border-slate-100/80 px-3 py-3.5 outline-none transition hover:bg-blue-50/25 md:px-4 md:py-4",
-                        rowSurface
+                        "border-b border-slate-100/80 px-3 py-3.5 outline-none transition md:px-4 md:py-4",
+                        rowSurfaceChrome
                       )}
+                      style={rowSurfaceStyle}
                     >
                       <div className="grid grid-cols-[28px_1fr_auto] items-start gap-2 md:grid-cols-[44px_minmax(250px,1.35fr)_170px_120px_78px_64px] md:items-center md:gap-4">
                         <div className="pt-0.5 text-center text-[15px] font-black tabular-nums text-slate-300/95 md:pt-0 md:text-base">{index + 1}</div>
@@ -1594,7 +1682,7 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); onInsight(row.stock.symbol, "short"); }}
-                          className="flex shrink-0 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(255,255,255,0.66)_0%,rgba(248,250,252,0.82)_100%)] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.74),0_4px_12px_rgba(15,23,42,0.06)] transition hover:bg-white/70 md:order-5 md:justify-self-center"
+                          className="flex h-[56px] w-[56px] min-h-[56px] min-w-[56px] max-h-[56px] max-w-[56px] shrink-0 items-center justify-center rounded-full bg-transparent p-0 shadow-none ring-0 transition hover:bg-transparent md:order-5 md:justify-self-center"
                           title={row.recommendation?.label || "查看短線評語"}
                         >
                           <ScoreRing score={row.short.score100} pending={row.short.quotePending} />
@@ -1621,10 +1709,10 @@ function OverviewTable({ rows, selected, onSelect, onInsight, onRemove, dataMode
                           {move.change !== null ? (
                             <>
                               <span className={cx(
-                                "grid h-8 w-8 shrink-0 place-items-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.58),0_5px_12px_rgba(15,23,42,0.07)] md:h-9 md:w-9",
+                                "grid h-8 w-8 shrink-0 place-items-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.52),0_3px_8px_rgba(15,23,42,0.045)] md:h-8 md:w-8",
                                 move.direction === "up" ? "border-rose-200/85 bg-rose-50/88 text-rose-500" : move.direction === "down" ? "border-emerald-200/85 bg-emerald-50/88 text-emerald-500" : "border-slate-200/85 bg-slate-50/88 text-slate-400"
                               )}>
-                                {move.direction === "up" ? <span className="text-[18px] leading-none md:text-[20px]">▲</span> : move.direction === "down" ? <span className="text-[18px] leading-none md:text-[20px]">▼</span> : <span className="text-[15px] leading-none md:text-[17px]">▪</span>}
+                                {move.direction === "up" ? <span className="text-[13px] leading-none md:text-[15px]">▲</span> : move.direction === "down" ? <span className="text-[13px] leading-none md:text-[15px]">▼</span> : <span className="text-[11px] leading-none md:text-[13px]">▪</span>}
                               </span>
                               <div className="leading-none">
                                 <div>{formatArrowNumber(move.change)}</div>
@@ -2377,7 +2465,6 @@ function FrameworkTable({ title, subtitle, result, showScore = false, horizon, o
 }
 
 
-
 function applyIntradayQuoteGateToShortScore(result, stock) {
   const readiness = getIntradayQuoteReadiness(stock);
   if (readiness.ready) {
@@ -2601,6 +2688,7 @@ export default function StockShortV1App() {
 
   const [stocks, setStocks] = useState(initialStocks);
   const [selected, setSelected] = useState("");
+  const [lastSelectedSymbol, setLastSelectedSymbol] = useState("");
   const [newAsset, setNewAsset] = useState({ symbol: "", name: "", type: "股票", market: "TWSE" });
   const [addError, setAddError] = useState("");
   const [insightTarget, setInsightTarget] = useState(null);
@@ -2647,11 +2735,20 @@ export default function StockShortV1App() {
     setStocks((prev) => fillNamesFromValidationMap(prev, validationMap));
   }, [validationMap]);
 
-  const current = stocks.find((s) => s.symbol === selected) || stocks[0];
+  const current = stocks.find((s) => s.symbol === selected) || stocks.find((s) => s.symbol === lastSelectedSymbol) || stocks[0];
   const derived = getDerived(current);
   const overviewRows = useMemo(() => buildOverviewRows(stocks, validationMap, weightConfig), [stocks, validationMap, weightConfig]);
   const activeInsightRow = insightTarget ? overviewRows.find((row) => row.stock.symbol === insightTarget.symbol) : null;
   const activeInsight = insightTarget ? getHorizonInsight(activeInsightRow, insightTarget.horizon) : null;
+  function handleSelectSymbol(symbol) {
+    if (symbol) setLastSelectedSymbol(symbol);
+    setSelected((prev) => (prev === symbol ? "" : symbol));
+  }
+  function handleInsightRequest(symbol, horizon) {
+    if (symbol) setLastSelectedSymbol(symbol);
+    setSelected(symbol);
+    setInsightTarget({ symbol, horizon });
+  }
   function recordSourceRuntime(source, runtime) {
     if (!source || !runtime) return;
     setSourceRuntimeMap((prev) => ({
@@ -2939,7 +3036,6 @@ export default function StockShortV1App() {
   ]);
 
 
-
   useEffect(() => {
     if (!stocksHydrated || !apiConfig.twseProxyUrl) return undefined;
 
@@ -3019,7 +3115,6 @@ export default function StockShortV1App() {
     apiConfig.finmindDerivativesProxyUrl,
     stocks.map((stock) => stock.symbol).join(","),
   ]);
-
 
 
   async function loadTwseHistorySnapshot(symbolOverride = null, options = {}) {
@@ -3174,7 +3269,6 @@ export default function StockShortV1App() {
       if (!silent) setApiLoading(false);
     }
   }
-
 
 
   async function loadTwseMisVolume(symbolOverride = null, options = {}) {
@@ -3608,18 +3702,33 @@ export default function StockShortV1App() {
 
         <AddAssetForm value={newAsset} onChange={setNewAsset} onAdd={addAsset} error={addError} />
 
-        <OverviewTable
-          rows={overviewRows}
-          selected={selected}
-          onSelect={(symbol) => setSelected((prev) => (prev === symbol ? "" : symbol))}
-          onInsight={(symbol, horizon) => { setSelected(symbol); setInsightTarget({ symbol, horizon }); }}
-          onRemove={removeAsset}
-          dataMode={dataMode}
-          lastFetchMap={lastFetchMap}
-          marketIndex={marketIndex}
-          selectedDetail={selectedDetailPanel}
-        />
+        <div className="hidden md:block">
+          <OverviewTable
+            rows={overviewRows}
+            selected={selected}
+            onSelect={handleSelectSymbol}
+            onInsight={handleInsightRequest}
+            onRemove={removeAsset}
+            dataMode={dataMode}
+            lastFetchMap={lastFetchMap}
+            marketIndex={marketIndex}
+            selectedDetail={selectedDetailPanel}
+          />
+        </div>
 
+        <div className="block md:hidden">
+          <MobileOverviewCards
+            rows={overviewRows}
+            selected={selected}
+            onSelect={handleSelectSymbol}
+            onInsight={handleInsightRequest}
+            onRemove={removeAsset}
+            dataMode={dataMode}
+            lastFetchMap={lastFetchMap}
+            marketIndex={marketIndex}
+            selectedDetail={selectedDetailPanel}
+          />
+        </div>
 
 
         {showDebugPanel && (
