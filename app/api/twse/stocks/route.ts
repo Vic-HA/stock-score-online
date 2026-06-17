@@ -1,7 +1,24 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_03_TWSE_OPENAPI_DATA_TIME";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 export const revalidate = 0;
 
 const STOCK_DAY_ALL_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
@@ -66,6 +83,46 @@ function toNumber(value, fallback = null) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function rocDateToIso(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 7) {
+    const year = Number(digits.slice(0, 3)) + 1911;
+    const month = digits.slice(3, 5);
+    const day = digits.slice(5, 7);
+    return `${year}-${month}-${day}`;
+  }
+
+  if (digits.length === 8) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  }
+
+  return raw;
+}
+
+function latestRawDate(rows) {
+  const dates = (Array.isArray(rows) ? rows : [])
+    .map((row) => String(getAny(row, ["Date", "date", "資料日期", "statDate"], "")).trim())
+    .filter(Boolean)
+    .sort();
+  return dates[dates.length - 1] || null;
+}
+
+function makeTwseDataTime(stockDayRawDate, bwibbuRawDate) {
+  const stockDayDateIso = rocDateToIso(stockDayRawDate);
+  const bwibbuDateIso = rocDateToIso(bwibbuRawDate);
+  return {
+    stockDayDate: stockDayRawDate || null,
+    stockDayDateIso,
+    bwibbuDate: bwibbuRawDate || null,
+    bwibbuDateIso,
+    note: "TWSE OpenAPI source data dates, not fetch/cache timestamps.",
+  };
+}
+
+
 function normalizePriceRow(row) {
   const symbol = normalizeStockSymbol(
     getAny(row, ["Code", "code", "證券代號", "股票代號", "stockNo", "stock_id", "Symbol"])
@@ -122,6 +179,7 @@ function normalizePriceRow(row) {
     tradeValue,
     updatedAt: date,
     sourceNote: "TWSE OpenAPI STOCK_DAY_ALL",
+    dataTime: { stockDayDate: date || null, stockDayDateIso: rocDateToIso(date), note: "TWSE STOCK_DAY_ALL source data date, not fetch/cache timestamp." },
   };
 }
 
@@ -150,6 +208,7 @@ function normalizeBwibbuRow(row) {
     pbr,
     dividendYield,
     sourceNote: "TWSE OpenAPI BWIBBU_ALL",
+    dataTime: { bwibbuDate: String(getAny(row, ["Date", "date", "資料日期", "statDate"], "")).trim() || null, bwibbuDateIso: rocDateToIso(getAny(row, ["Date", "date", "資料日期", "statDate"], "")), note: "TWSE BWIBBU_ALL source data date, not fetch/cache timestamp." },
   };
 }
 
@@ -175,6 +234,11 @@ function mergeRows(priceRows, valuationRows) {
       per: row.per ?? previous.per,
       pbr: row.pbr ?? previous.pbr,
       dividendYield: row.dividendYield ?? previous.dividendYield,
+      dataTime: {
+        ...(previous.dataTime || {}),
+        ...(row.dataTime || {}),
+        note: "TWSE OpenAPI source data dates, not fetch/cache timestamps.",
+      },
       sourceNote: [previous.sourceNote, row.sourceNote].filter(Boolean).join(" + "),
     });
   });
@@ -196,7 +260,7 @@ async function fetchJson(url) {
   return res.json();
 }
 
-export async function GET(request) {
+async function uncachedGET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const requestedSymbols = parseList(searchParams.get("symbols"));
@@ -209,10 +273,21 @@ export async function GET(request) {
     const stockDayRows = Array.isArray(stockDayJson) ? stockDayJson : Array.isArray(stockDayJson?.data) ? stockDayJson.data : [];
     const bwibbuRows = Array.isArray(bwibbuJson) ? bwibbuJson : Array.isArray(bwibbuJson?.data) ? bwibbuJson.data : [];
 
+    const stockDayRawDate = latestRawDate(stockDayRows);
+    const bwibbuRawDate = latestRawDate(bwibbuRows);
+    const dataTimeSummary = makeTwseDataTime(stockDayRawDate, bwibbuRawDate);
+
     const merged = mergeRows(
       stockDayRows.map(normalizePriceRow).filter(Boolean),
       bwibbuRows.map(normalizeBwibbuRow).filter(Boolean)
-    );
+    ).map((row) => ({
+      ...row,
+      dataTime: {
+        ...dataTimeSummary,
+        ...(row.dataTime || {}),
+        note: "TWSE OpenAPI source data dates, not fetch/cache timestamps.",
+      },
+    }));
 
     const bySymbol = new Map(merged.map((row) => [row.symbol, row]));
     const stocks = requestedSymbols
@@ -227,6 +302,7 @@ export async function GET(request) {
         source: "twse_proxy",
         requestedSymbols,
         count: stocks.length,
+        dataTimeSummary,
         stocks,
         missingSymbols,
         fetchedAt: new Date().toISOString(),
@@ -260,3 +336,54 @@ export async function GET(request) {
     );
   }
 }
+
+
+export async function GET(request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheKey = buildRouteCacheKey("twse_stocks", request.url);
+
+  try {
+    const cached = await getOrFetchScheduledDailyCached({
+      key: cacheKey,
+      force,
+      meta: { route: "/api/twse/stocks", policy: "TWSE OpenAPI scheduled cache" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "scheduled_daily",
+          schedule: "08:30 / 14:10 / 15:30 / 18:00 / 22:00 Asia/Taipei",
+          force,
+          route: "/api/twse/stocks",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/twse/stocks",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "scheduled_daily", force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+

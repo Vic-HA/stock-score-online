@@ -1,7 +1,24 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_03_FINMIND_DERIVATIVES_DATA_TIME";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 
 const FINMIND_API_URL = "https://api.finmindtrade.com/api/v4/data";
 
@@ -254,7 +271,19 @@ function summarizeOptionInstitutional(rows: any[]) {
   };
 }
 
-export async function GET(request: Request) {
+
+function buildDerivativesDataTimeSummary(derivatives: any) {
+  return {
+    futuresDate: derivatives?.futures?.date || null,
+    futuresAfterMarketDate: derivatives?.futures?.afterMarket?.date || null,
+    futuresInstitutionalDate: derivatives?.futuresInstitutional?.date || null,
+    optionDate: derivatives?.options?.date || null,
+    optionInstitutionalDate: derivatives?.optionInstitutional?.date || null,
+    note: "FinMind Derivatives source data dates, not fetch/cache timestamps.",
+  };
+}
+
+async function uncachedGET(request: Request) {
   const { token, tokenSource } = getRequestToken(request);
 
   if (!token) {
@@ -299,28 +328,31 @@ export async function GET(request: Request) {
   const afterSpreadPer = futures?.afterMarket?.spreadPer ?? null;
   const regularSpreadPer = futures?.spreadPer ?? null;
 
+const derivativesPayload = {
+    futuresId,
+    optionId,
+    futures,
+    futuresInstitutional: futuresInst,
+    options,
+    optionInstitutional: optionInst,
+    derived: {
+      taifexAfterHoursReturn: afterSpreadPer,
+      futuresSpreadPer: regularSpreadPer,
+      futuresInstitutionalNetAmount: futuresInst?.txInstitutionalNetAmount ?? null,
+      futuresInstitutionalNetVolume: futuresInst?.txInstitutionalNetVolume ?? null,
+      futuresOpenInterestNetAmount: futuresInst?.txOpenInterestNetAmount ?? null,
+      putCallVolumeRatio: options?.putCallVolumeRatio ?? null,
+      putCallOpenInterestRatio: options?.putCallOpenInterestRatio ?? null,
+      optionInstitutionalNetBias: optionInst?.optionInstitutionalNetBias ?? null,
+    },
+  };
+
   return NextResponse.json({
     ok: true,
     source: "finmind_derivatives_proxy",
     tokenSource,
-    derivatives: {
-      futuresId,
-      optionId,
-      futures,
-      futuresInstitutional: futuresInst,
-      options,
-      optionInstitutional: optionInst,
-      derived: {
-        taifexAfterHoursReturn: afterSpreadPer,
-        futuresSpreadPer: regularSpreadPer,
-        futuresInstitutionalNetAmount: futuresInst?.txInstitutionalNetAmount ?? null,
-        futuresInstitutionalNetVolume: futuresInst?.txInstitutionalNetVolume ?? null,
-        futuresOpenInterestNetAmount: futuresInst?.txOpenInterestNetAmount ?? null,
-        putCallVolumeRatio: options?.putCallVolumeRatio ?? null,
-        putCallOpenInterestRatio: options?.putCallOpenInterestRatio ?? null,
-        optionInstitutionalNetBias: optionInst?.optionInstitutionalNetBias ?? null,
-      },
-    },
+    dataTimeSummary: buildDerivativesDataTimeSummary(derivativesPayload),
+    derivatives: derivativesPayload,
     datasetStatus: {
       TaiwanFutOptDailyInfo: futOptInfo.ok,
       TaiwanFuturesDaily: futuresDaily.ok,
@@ -355,3 +387,56 @@ export async function GET(request: Request) {
     },
   });
 }
+
+
+export async function GET(request: Request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheTtlMs = parseTtlMs(url.searchParams, 60 * 60 * 1000);
+  const cacheKey = buildRouteCacheKey("finmind_derivatives_v03", request.url);
+
+  try {
+    const cached = await getOrFetchCached({
+      key: cacheKey,
+      ttlMs: cacheTtlMs,
+      force,
+      meta: { route: "/api/finmind/derivatives", policy: "FinMind Derivatives 1h TTL" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "ttl",
+          ttlMs: cacheTtlMs,
+          force,
+          route: "/api/finmind/derivatives",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/finmind/derivatives",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "ttl", ttlMs: cacheTtlMs, force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+

@@ -1,7 +1,24 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02C_YAHOO_OHLCV_DATA_TIME";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 export const revalidate = 0;
 
 const YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart";
@@ -32,7 +49,7 @@ function parseSymbols(input: string | null) {
     .split(",")
     .map((x) => normalizeStockSymbol(x))
     .filter(Boolean)
-    .slice(0, 10);
+    .slice(0, 50);
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -441,6 +458,15 @@ async function fetchYahoo(symbol: string, range: string, interval: string) {
     dailyVolume: latest?.volume ?? null,
     adjClose: latest?.adjClose ?? null,
     updatedAt: latest?.date || "",
+    dataTime: {
+      firstOhlcvDate: sorted[0]?.date || null,
+      latestOhlcvDate: latest?.date || null,
+      rowCount: sorted.length,
+      timezone,
+      range,
+      interval,
+      note: "Yahoo OHLCV source data dates, not fetch/cache timestamps.",
+    },
     rows: sorted.slice(-20),
     technicalRows,
     ...technical,
@@ -449,7 +475,26 @@ async function fetchYahoo(symbol: string, range: string, interval: string) {
   };
 }
 
-export async function GET(request: Request) {
+
+function buildYahooOhlcvDataTimeSummary(stocks: any[]) {
+  const dates = (Array.isArray(stocks) ? stocks : [])
+    .map((stock) => stock?.dataTime?.latestOhlcvDate)
+    .filter(Boolean)
+    .sort();
+  const firstDates = (Array.isArray(stocks) ? stocks : [])
+    .map((stock) => stock?.dataTime?.firstOhlcvDate)
+    .filter(Boolean)
+    .sort();
+
+  return {
+    latestOhlcvDate: dates[dates.length - 1] || null,
+    earliestOhlcvDate: firstDates[0] || null,
+    symbolsWithDataTime: dates.length,
+    note: "Yahoo OHLCV source data dates, not fetch/cache timestamps.",
+  };
+}
+
+async function uncachedGET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbols = parseSymbols(searchParams.get("symbols"));
   const range = searchParams.get("range") || "1y";
@@ -474,6 +519,7 @@ export async function GET(request: Request) {
     source: "yahoo_ohlcv_validation",
     requestedSymbols: symbols,
     count: stocks.length,
+    dataTimeSummary: buildYahooOhlcvDataTimeSummary(stocks),
     stocks,
     errors,
     fetchedAt: new Date().toISOString(),
@@ -482,3 +528,54 @@ export async function GET(request: Request) {
     },
   });
 }
+
+
+export async function GET(request: Request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheKey = buildRouteCacheKey("yahoo_ohlcv_v02c", request.url);
+
+  try {
+    const cached = await getOrFetchScheduledDailyCached({
+      key: cacheKey,
+      force,
+      meta: { route: "/api/yahoo/ohlcv", policy: "Yahoo OHLCV scheduled cache" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "scheduled_daily",
+          schedule: "08:30 / 14:10 / 15:30 / 18:00 / 22:00 Asia/Taipei",
+          force,
+          route: "/api/yahoo/ohlcv",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/yahoo/ohlcv",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "scheduled_daily", force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+

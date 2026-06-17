@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getOrFetchScheduledDailyCached, isForceRefresh } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02D_YAHOO_ETF_DATA_TIME_HELPER_FIX";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 
 type YahooEtfRow = {
   symbol: string;
@@ -18,6 +35,12 @@ type YahooEtfRow = {
   premiumDiscountPct: number | null;
   refUrl: string;
   fetchedAt: string;
+  dataTime?: {
+    quoteDate: string | null;
+    sourceTimeText: string | null;
+    confidence: "low" | "medium" | "high";
+    note: string;
+  };
   probeQuality: {
     matched: boolean;
     extractedAny: boolean;
@@ -54,7 +77,7 @@ function parseSymbols(input: string | null): string[] {
         .filter(Boolean)
         .map((s) => s.replace(/\.(TW|TWO)$/i, "").padStart(4, "0"))
     )
-  );
+  ).slice(0, 50);
 }
 
 function decodeHtml(input: string): string {
@@ -89,6 +112,15 @@ function toNumber(value: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function makeYahooEtfDataTime(sourceTimeText: string | null = null) {
+  return {
+    quoteDate: null,
+    sourceTimeText,
+    confidence: "low" as const,
+    note: "Yahoo ETF page does not expose a reliable structured quote date/time in this parser; this is source time text only when available, not fetch/cache timestamp.",
+  };
+}
+
 function buildEmptyRow(symbol: string, fetchedAt: string): YahooEtfRow {
   return {
     symbol,
@@ -106,6 +138,7 @@ function buildEmptyRow(symbol: string, fetchedAt: string): YahooEtfRow {
     premiumDiscountPct: null,
     refUrl: "",
     fetchedAt,
+    dataTime: makeYahooEtfDataTime(null),
     probeQuality: {
       matched: false,
       extractedAny: false,
@@ -175,6 +208,7 @@ function extractRowFromText(
     premiumDiscountPct: toNumber(premiumRaw),
     refUrl,
     fetchedAt,
+    dataTime: makeYahooEtfDataTime(null),
     probeQuality: {
       matched: true,
       extractedAny: true,
@@ -243,7 +277,17 @@ async function fetchText(url: string): Promise<{ text: string; status: FetchStat
   }
 }
 
-export async function GET(req: NextRequest) {
+
+function buildYahooEtfDataTimeSummary(etfs: YahooEtfRow[]) {
+  const rows = Array.isArray(etfs) ? etfs : [];
+  return {
+    symbolsWithExplicitQuoteTime: rows.filter((row) => row.dataTime?.quoteDate || row.dataTime?.sourceTimeText).length,
+    confidence: "low",
+    note: "Yahoo ETF route is a backup parser. It does not expose reliable structured source data time yet; do not use fetchedAt/cache time as quote time.",
+  };
+}
+
+async function uncachedGET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const symbols = parseSymbols(searchParams.get("symbols"));
   const debug = searchParams.get("debug") === "1";
@@ -289,6 +333,7 @@ export async function GET(req: NextRequest) {
     route: "/api/yahoo/etf",
     requestedSymbols: symbols,
     count: validEtfs.length,
+    dataTimeSummary: buildYahooEtfDataTimeSummary(etfs),
     etfs,
     rawDataMap,
     missingSymbols,
@@ -308,3 +353,54 @@ export async function GET(req: NextRequest) {
       : undefined,
   });
 }
+
+
+export async function GET(req: NextRequest) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(req.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheKey = buildRouteCacheKey("yahoo_etf_v02d", req.url);
+
+  try {
+    const cached = await getOrFetchScheduledDailyCached({
+      key: cacheKey,
+      force,
+      meta: { route: "/api/yahoo/etf", policy: "Yahoo ETF scheduled cache" },
+      fetcher: async () => {
+        const res = await uncachedGET(req);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "scheduled_daily",
+          schedule: "08:30 / 14:10 / 15:30 / 18:00 / 22:00 Asia/Taipei",
+          force,
+          route: "/api/yahoo/etf",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/yahoo/etf",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "scheduled_daily", force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+

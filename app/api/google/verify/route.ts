@@ -1,7 +1,24 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
+import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
+
+const CACHE_BUILD_VERSION = "CACHE_BUILD_02_NONREALTIME_AND_GOOGLE_50_LIMIT";
+
+function buildRouteCacheKey(prefix: string, requestUrl: string) {
+  const url = new URL(requestUrl);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const params = Array.from(url.searchParams.entries())
+    .filter(([key]) => !ignored.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
+
+  return `${prefix}:${params || "default"}`;
+}
+
+
 export const revalidate = 0;
 
 const GOOGLE_VERIFY_ROUTE_VERSION = "GOOGLE_VERIFY_V3_FIELDS_2026_05_07";
@@ -390,7 +407,7 @@ function parseAndNormalizeCsv(text: string) {
   return { parsed, headers, dataRows, normalizedRows, formulaCompleteness: formulaCompletenessScore(normalizedRows) };
 }
 
-export async function GET(request: Request) {
+async function uncachedGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const csvUrl = searchParams.get("url");
@@ -542,3 +559,56 @@ export async function GET(request: Request) {
     );
   }
 }
+
+
+export async function GET(request: Request) {
+  const wrapperStartedAt = new Date().toISOString();
+  const url = new URL(request.url);
+  const force = isForceRefresh(url.searchParams);
+  const cacheTtlMs = parseTtlMs(url.searchParams, 20 * 1000);
+  const cacheKey = buildRouteCacheKey("google_verify", request.url);
+
+  try {
+    const cached = await getOrFetchCached({
+      key: cacheKey,
+      ttlMs: cacheTtlMs,
+      force,
+      meta: { route: "/api/google/verify", policy: "Google CSV 20s TTL" },
+      fetcher: async () => {
+        const res = await uncachedGET(request);
+        const payload = await res.json();
+        return { payload, status: res.status };
+      },
+    });
+
+    return NextResponse.json(
+      {
+        ...cached.value.payload,
+        cache: cached.cache,
+        cachePolicy: {
+          build: CACHE_BUILD_VERSION,
+          kind: "ttl",
+          ttlMs: cacheTtlMs,
+          force,
+          route: "/api/google/verify",
+        },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+      },
+      { status: cached.value.status || 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        route: "/api/google/verify",
+        cachePolicy: { build: CACHE_BUILD_VERSION, kind: "ttl", ttlMs: cacheTtlMs, force },
+        wrapperStartedAt,
+        wrapperFinishedAt: new Date().toISOString(),
+        error: error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+
