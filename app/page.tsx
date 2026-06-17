@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 // BUILD_V73A13_GOOGLE_DEDUP_TWSE_IMPLIED_EPS
+// BUILD_PHASE_D_PREOPEN_VALIDATION_STATUS_MINIMAL
 // BUILD_V73A12_OHLCV_SNAPSHOT_AND_FINMIND_ONLY_CLEANUP
 // BUILD_V73A9_FINMIND_MARKET_MAIN_GOOGLE_VERIFY
 // BUILD_V73A6_TWSE_SNAPSHOT_VOLUME_BASE_FIRST
@@ -571,6 +572,111 @@ function appendRouteQuery(url, params = {}) {
   return `${url}${sep}${entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join("&")}`;
 }
 
+
+const TWSE_PREOPEN_STATUS = "盤前待開盤";
+const TWSE_PREOPEN_REFERENCE_STATUS = "盤前參考";
+
+function getMinuteOfDayFromTimeText(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const match = raw.match(/(?:^|[T\s])(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function isTwsePreOpenByTradeTime(value) {
+  const minuteOfDay = getMinuteOfDayFromTimeText(value);
+  if (minuteOfDay === null) return false;
+  return minuteOfDay < 9 * 60;
+}
+
+function isPreOpenValidationStatus(status) {
+  return String(status || "").includes("盤前");
+}
+
+function validationStatusClassForDisplay(status) {
+  if (isPreOpenValidationStatus(status)) return "bg-sky-100 text-sky-800";
+  return validationStatusClass(status);
+}
+
+function validationDiffTextForDisplay(row) {
+  if (isPreOpenValidationStatus(row?.status)) return "-";
+  return validationDiffText(row);
+}
+
+function validationToleranceTextForDisplay(row) {
+  if (isPreOpenValidationStatus(row?.status)) return "-";
+  return validationToleranceText(row);
+}
+
+function compactValidationNoteForDisplay(row) {
+  if (isPreOpenValidationStatus(row?.status) && row?.note) return row.note;
+  return compactValidationNote(row);
+}
+
+function hasPreOpenValidationRow(rows = []) {
+  return rows.some((row) => isPreOpenValidationStatus(row?.status));
+}
+
+function getValidationStateForDisplay(rows = []) {
+  const state = getValidationState(rows);
+  if (hasPreOpenValidationRow(rows) && state.failed === 0 && state.missing === 0) {
+    return {
+      ...state,
+      label: TWSE_PREOPEN_STATUS,
+      tone: "bg-sky-100 text-sky-800",
+    };
+  }
+  return state;
+}
+
+function validationSummaryForDisplay(rows = []) {
+  const state = getValidationStateForDisplay(rows);
+  if (state.label === TWSE_PREOPEN_STATUS) {
+    return "目前尚未開盤，盤中價量缺值屬正常盤前狀態；日線、技術、籌碼與盤後資料仍可正常驗證。";
+  }
+  return validationSummary(rows);
+}
+
+function applyTwsePreOpenValidationStatus(rows = [], isPreOpen = false, tradetime = "") {
+  if (!isPreOpen) return rows;
+  const timeText = String(tradetime || "").trim();
+  const preOpenNote = `TWSE MIS 時間${timeText ? ` ${timeText}` : ""} 尚在 09:00 前，盤中成交價量未開盤屬正常盤前狀態；先保留昨日日線與外部參考，不判定為資料異常。`;
+  const prevCloseNote = `盤前 GoogleFinance 可能仍是外部快照或即時口徑未更新；TWSE 官方昨收主值保留，不在開盤前判定差異偏大。${timeText ? `MIS 時間 ${timeText}。` : ""}`;
+
+  return rows.map((row) => {
+    if (!row) return row;
+    const label = String(row.label || "");
+    if (["現價 price", "成交量 volume", "TWSE MIS 盤中價量"].includes(label)) {
+      return {
+        ...row,
+        status: TWSE_PREOPEN_STATUS,
+        diffPct: 0,
+        tolerancePct: 0,
+        toleranceLabel: "盤前",
+        note: preOpenNote,
+        currentSource: "TWSE MIS（盤前未開盤）",
+        compareSource: label === "TWSE MIS 盤中價量" ? "不比對" : row.compareSource,
+      };
+    }
+    if (label === "昨收 prevClose" && ["差異偏大", "需檢查"].includes(row.status)) {
+      return {
+        ...row,
+        status: TWSE_PREOPEN_REFERENCE_STATUS,
+        diffPct: 0,
+        tolerancePct: 0,
+        toleranceLabel: "盤前參考",
+        note: prevCloseNote,
+      };
+    }
+    return row;
+  });
+}
+
 function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const main = stock || {};
   const noCompare = "尚無比對來源";
@@ -827,6 +933,7 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const twseMisMainPriceValue = twseMisPrice.value !== null ? twseMisPrice.value : twseMisPriceFallback.value !== null ? twseMisPriceFallback.value : twseMisQuoteMidPrice.value;
   const twseMisMainPriceSource = twseMisPrice.value !== null ? twseMisPrice.source : twseMisPriceFallback.value !== null ? twseMisPriceFallback.source : twseMisQuoteMidPrice.value !== null ? `${twseMisQuoteMidPrice.source} 五檔中間價` : noCompare;
   const twseMisTimeLabel = twseMisTradetime.value ? `（${twseMisTradetime.value}${twseMisQuoteAgeSec.value !== null ? ` / age ${twseMisQuoteAgeSec.value}s` : ""}）` : "";
+  const isTwseMisPreOpen = isTwsePreOpenByTradeTime(twseMisTradetime.value);
 
   const finmindDataTime = main.finmindDataTime || {};
   const finmindProfileDataTime = main.finmindProfileDataTime || {};
@@ -945,7 +1052,8 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
     twseMisDisplayPriceType: twseMisDisplayPriceType.value,
   };
 
-  return cleanupFinMindOnlyValidationRows(rows.filter(Boolean)).map((row) => attachValidationDateLabels(row, validationDateLabelContext));
+  const normalizedRows = cleanupFinMindOnlyValidationRows(rows.filter(Boolean)).map((row) => attachValidationDateLabels(row, validationDateLabelContext));
+  return applyTwsePreOpenValidationStatus(normalizedRows, isTwseMisPreOpen, twseMisTradetime.value);
 }
 
 
@@ -1000,6 +1108,7 @@ function getDimensionShortPhrase(name, scorePct) {
 function getValidationCompactLabel(validationState) {
   const label = String(validationState?.label || "");
   if (!label) return "未確認";
+  if (label.includes("盤前")) return TWSE_PREOPEN_STATUS;
   if (label.includes("通過")) return "通過";
   if (label.includes("日期")) return "日期未對齊";
   if (label.includes("需查") || label.includes("需")) return "需查";
@@ -1013,11 +1122,17 @@ function getValidationCompactLabel(validationState) {
 function getValidationCompactTone(validationState) {
   // Reuse the exact validation status color mapping from the debug validation table.
   // This is UI-only: it does not change validation logic, source comparison, or scoring.
-  return validationStatusClass(getValidationCompactLabel(validationState));
+  return validationStatusClassForDisplay(getValidationCompactLabel(validationState));
 }
 
 function getValidationProductMeta(validationState) {
   const label = getValidationCompactLabel(validationState);
+  if (label.includes("盤前")) {
+    return {
+      pill: "border border-sky-200/85 bg-[linear-gradient(180deg,rgba(240,249,255,0.98)_0%,rgba(224,242,254,0.88)_100%)] text-sky-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_4px_10px_rgba(14,165,233,0.11)]",
+      dot: "bg-sky-500 shadow-[0_0_0_3px_rgba(14,165,233,0.14)]",
+    };
+  }
   if (label.includes("通過")) {
     return {
       pill: "border border-emerald-200/85 bg-[linear-gradient(180deg,rgba(236,253,245,0.98)_0%,rgba(209,250,229,0.86)_100%)] text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_4px_10px_rgba(16,185,129,0.12)]",
@@ -1149,7 +1264,7 @@ function buildOverviewRows(stocks, validationMap = {}, weightConfig = DEFAULT_WE
     const long = scoreLongV1(stock, weightConfig);
     const derived = getDerived(stock);
     const validationRows = getSourceValidationRows(stock.symbol, stock, validationMap);
-    const validationState = getValidationState(validationRows);
+    const validationState = getValidationStateForDisplay(validationRows);
     const scoringDims = short.dimensions.filter((dim) => dim.weight > 0);
     return { stock, derived, short, mid, long, recommendation: getShortRecommendation(short.total, short.stopLoss), validationState, tech: scoringDims.find((dim) => dim.dimension === "技術面")?.scorePct || 0, chip: scoringDims.find((dim) => dim.dimension === "籌碼面")?.scorePct || 0, market: scoringDims.find((dim) => dim.dimension === "市場面")?.scorePct || 0 };
   }).sort((a, b) => b.short.score100 - a.short.score100);
@@ -3746,7 +3861,7 @@ export default function StockShortV1App() {
               </TabsList>
               <TabsContent value="sources"><div className="space-y-4"><SourceConnectorTable config={apiConfig} onConfigChange={setApiConfig} onSmartRefresh={runSmartRefresh} onLoadGoogle={loadGoogleCsv} onLoadFinMind={loadFinMindProxy} onLoadTwse={loadTwseOpenApi} onLoadTwseHistory={() => loadTwseHistorySnapshot()} onLoadTwseMis={loadTwseMisVolume} onLoadMarket={loadFinMindMarket} onLoadDerivatives={loadFinMindDerivatives} onLoadYahoo={loadYahooOhlcv} onLoadYahooEtf={loadYahooEtf} onLoadOfficialEtfInav={loadOfficialEtfInav} loading={apiLoading} apiMessage={apiMessage} lastFetchMap={lastFetchMap} sourceRuntimeMap={sourceRuntimeMap} stocks={stocks} googleDebug={googleDebug} /><Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料來源角色總覽</h3><div className="rounded-lg border bg-slate-50 p-3 text-xs leading-6 text-slate-600"><div className="font-semibold text-slate-900">資料原則</div><div>資料源只分三種更新規則：即時區（TWSE MIS / ETF iNAV / GoogleFinance）短 TTL；固定時段盤後校正區（TWSE OpenAPI / TWSE Snapshot / Yahoo 備援）使用 08:30 / 14:10 / 15:30 / 18:00 / 22:00 cache；FinMind 區（stocks / market / derivatives）採 1 小時 TTL。GoogleFinance 降級為輔助驗證；Yahoo 只作救援抽樣；FinMind Minute 已移除。</div></div><div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[1050px] text-sm"><thead className="bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[130px] py-2">來源</th><th className="w-[170px]">Dataset / API</th><th>主要欄位</th><th>使用方式</th><th className="w-[220px]">角色</th></tr></thead><tbody>{sourceRoleOverviewGroups.map((group) => <React.Fragment key={group.title}><tr className={`${group.tone} border-b`}><td colSpan={5} className="px-2 py-2 text-xs font-semibold"><div>{group.title}</div><div className="mt-0.5 font-normal">{group.description}</div></td></tr>{group.items.map((item) => <tr key={item.aspect} className="border-b last:border-0 align-top"><td className="py-2 font-medium">{item.aspect}</td><td className="text-slate-600">{item.datasets}</td><td className="text-slate-600">{item.fields}</td><td className="text-slate-500">{item.calcNote}</td><td className="text-slate-500"><div>短：{item.shortRole}</div><div>中：{item.midRole}</div><div>長：{item.longRole}</div></td></tr>)}</React.Fragment>)}</tbody></table></div></CardContent></Card><GoogleDiagnosticsSection googleDebug={googleDebug} stocks={stocks} /></div></TabsContent>
         
-              <TabsContent value="validate">{(() => { const validationRows = getSourceValidationRows(current?.symbol || selected, current, validationMap); const validationState = getValidationState(validationRows); const groupedRows = validationGroupRows(validationRows); return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料驗證</h3><p className="text-sm text-slate-500 mt-2">即時與歷史資料分區；盤中 price / volume 以 TWSE MIS 為主，日線技術以 TWSE Snapshot 自算為主，FinMind 驗證。</p></div><div className="flex flex-wrap gap-2"><Badge className={validationState.tone}>{validationState.label}</Badge><Badge className="bg-slate-100 text-slate-700">通過 {validationState.passed}｜需查 {validationState.failed}｜缺資料 {validationState.missing}</Badge></div></div><div className="rounded-xl bg-white border p-3 text-sm text-slate-700"><span className="font-medium text-slate-900">驗證結論：</span>{validationSummary(validationRows)}</div><div className="max-h-[360px] overflow-y-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[960px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[190px] py-2">項目</th><th className="w-[185px]">主來源</th><th className="w-[125px]">主值</th><th className="w-[155px]">驗證來源</th><th className="w-[125px]">驗證值</th><th className="w-[90px]">偏差</th><th className="w-[90px]">容忍</th><th className="w-[96px]">狀態</th></tr></thead><tbody>{groupedRows.map(({ group, rows }) => <React.Fragment key={group}><tr className="bg-slate-50"><td colSpan={8} className="px-2 py-2 text-xs font-semibold text-slate-700">{group}</td></tr>{rows.map((row) => <React.Fragment key={`${group}-${row.label}`}><tr className="align-top"><td className="py-1.5 pr-2 font-medium text-slate-900">{row.label}</td><td className="max-w-[185px] pr-2 text-xs leading-5 text-slate-500">{row.currentSource}</td><td className="pr-2">{displayValue(row.finmindValue)}</td><td className="max-w-[155px] pr-2 text-xs leading-5 text-slate-500">{row.compareSource}</td><td className="pr-2">{displayValue(row.googleValue)}</td><td className="pr-2">{validationDiffText(row)}</td><td className="pr-2">{validationToleranceText(row)}</td><td className="pr-2"><Badge className={validationStatusClass(row.status)}>{row.status}</Badge></td></tr><tr className="border-b last:border-0"><td colSpan={8} className="pb-2 pt-0 pl-2 pr-3 text-sm leading-5 text-slate-600">{compactValidationNote(row)}</td></tr></React.Fragment>)}</React.Fragment>)}</tbody></table></div><div className="rounded-xl border bg-slate-50 p-3 text-xs leading-5 text-slate-600">驗證層只檢查資料口徑，不覆蓋主資料、不參與評分。盤中 price / volume 以 TWSE MIS 為主；日線與技術主資料以 TWSE Snapshot 自算為主，FinMind 作驗證 / 備援。ETF 折溢價以即時估值欄位作輔助判斷。歷史與盤後資料需先對齊日期，不同日期不判失敗。</div></CardContent></Card>; })()}</TabsContent>
+              <TabsContent value="validate">{(() => { const validationRows = getSourceValidationRows(current?.symbol || selected, current, validationMap); const validationState = getValidationStateForDisplay(validationRows); const groupedRows = validationGroupRows(validationRows); return <Card className="rounded-xl shadow-sm"><CardContent className="p-3 space-y-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold flex items-center gap-2"><Icon name="doc" /> 資料驗證</h3><p className="text-sm text-slate-500 mt-2">即時與歷史資料分區；盤中 price / volume 以 TWSE MIS 為主，日線技術以 TWSE Snapshot 自算為主，FinMind 驗證。</p></div><div className="flex flex-wrap gap-2"><Badge className={validationState.tone}>{validationState.label}</Badge><Badge className="bg-slate-100 text-slate-700">通過 {validationState.passed}｜需查 {validationState.failed}｜缺資料 {validationState.missing}</Badge></div></div><div className="rounded-xl bg-white border p-3 text-sm text-slate-700"><span className="font-medium text-slate-900">驗證結論：</span>{validationSummaryForDisplay(validationRows)}</div><div className="max-h-[360px] overflow-y-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white pr-1 [scrollbar-gutter:stable]"><table className="w-full min-w-[960px] text-sm"><thead className="sticky top-0 z-10 bg-white"><tr className="border-b text-left text-slate-500"><th className="w-[190px] py-2">項目</th><th className="w-[185px]">主來源</th><th className="w-[125px]">主值</th><th className="w-[155px]">驗證來源</th><th className="w-[125px]">驗證值</th><th className="w-[90px]">偏差</th><th className="w-[90px]">容忍</th><th className="w-[96px]">狀態</th></tr></thead><tbody>{groupedRows.map(({ group, rows }) => <React.Fragment key={group}><tr className="bg-slate-50"><td colSpan={8} className="px-2 py-2 text-xs font-semibold text-slate-700">{group}</td></tr>{rows.map((row) => <React.Fragment key={`${group}-${row.label}`}><tr className="align-top"><td className="py-1.5 pr-2 font-medium text-slate-900">{row.label}</td><td className="max-w-[185px] pr-2 text-xs leading-5 text-slate-500">{row.currentSource}</td><td className="pr-2">{displayValue(row.finmindValue)}</td><td className="max-w-[155px] pr-2 text-xs leading-5 text-slate-500">{row.compareSource}</td><td className="pr-2">{displayValue(row.googleValue)}</td><td className="pr-2">{validationDiffTextForDisplay(row)}</td><td className="pr-2">{validationToleranceTextForDisplay(row)}</td><td className="pr-2"><Badge className={validationStatusClassForDisplay(row.status)}>{row.status}</Badge></td></tr><tr className="border-b last:border-0"><td colSpan={8} className="pb-2 pt-0 pl-2 pr-3 text-sm leading-5 text-slate-600">{compactValidationNoteForDisplay(row)}</td></tr></React.Fragment>)}</React.Fragment>)}</tbody></table></div><div className="rounded-xl border bg-slate-50 p-3 text-xs leading-5 text-slate-600">驗證層只檢查資料口徑，不覆蓋主資料、不參與評分。盤中 price / volume 以 TWSE MIS 為主；日線與技術主資料以 TWSE Snapshot 自算為主，FinMind 作驗證 / 備援。ETF 折溢價以即時估值欄位作輔助判斷。歷史與盤後資料需先對齊日期，不同日期不判失敗。</div></CardContent></Card>; })()}</TabsContent>
             </Tabs>
           </div>
         )}
