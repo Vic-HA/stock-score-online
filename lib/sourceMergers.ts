@@ -325,6 +325,69 @@ export function isTwseMisIntradayQuoteReady(stock) {
   return hasMisSource && hasTradeTime && hasPrice;
 }
 
+export function extractTaipeiDateKey(value) {
+  if (!value) return "";
+  if (typeof value === "object") {
+    return extractTaipeiDateKey(
+      value.stockDayDateIso ||
+      value.bwibbuDateIso ||
+      value.latestDate ||
+      value.snapshotSourceLatestDate ||
+      value.latestRawDate ||
+      value.dataDate ||
+      value.date ||
+      value.fetchedAt ||
+      value.updatedAt ||
+      ""
+    );
+  }
+
+  const text = String(value || "").trim();
+  const match = text.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+  if (!match) return "";
+  return `${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`;
+}
+
+export function getRealtimeQuoteDateKey(stock) {
+  return extractTaipeiDateKey(stock?.tradetime || stock?.updatedAt || stock?.googleUpdatedAt || "");
+}
+
+export function getDailySourceDateKey(source) {
+  return extractTaipeiDateKey(
+    source?.dataTime ||
+    source?.updatedAt ||
+    source?.latestDate ||
+    source?.twseHistoryLatestDate ||
+    source?.twseUpdatedAt ||
+    source?.finmindUpdatedAt ||
+    source?.date ||
+    ""
+  );
+}
+
+export function hasUsableTwseMisQuote(stock) {
+  const source = String(stock?.priceSource || "");
+  const hasMisSource = source.startsWith("TWSE MIS") || String(stock?.intradaySource || "") === "TWSE MIS";
+  const hasPrice = Number.isFinite(Number(stock?.price)) && Number(stock?.price) > 0;
+  return hasMisSource && hasPrice;
+}
+
+export function hasUsableRealtimeQuote(stock, now = new Date()) {
+  if (hasUsableTwseMisQuote(stock)) return true;
+  return isGoogleQuoteUsableForIntraday(stock, now);
+}
+
+export function shouldPreserveRealtimeMainQuote(previous, incomingDaily = {}, now = new Date()) {
+  if (!hasUsableRealtimeQuote(previous, now)) return false;
+
+  const realtimeDate = getRealtimeQuoteDateKey(previous);
+  const incomingDate = getDailySourceDateKey(incomingDaily);
+
+  // If we cannot prove the daily source is same-day or newer, do not let it roll back a valid MIS/Google quote.
+  if (!incomingDate || !realtimeDate) return true;
+  return incomingDate < realtimeDate;
+}
+
 export function getIntradayQuoteReadiness(stock, now = new Date()) {
   if (!isTwseMisAutoWindow(now)) {
     return { ready: true, pending: false, reason: "非盤中即時區間", source: stock?.priceSource || "" };
@@ -348,12 +411,9 @@ export function getIntradayQuoteReadiness(stock, now = new Date()) {
 }
 
 export function hasTwseMisIntradayLock(stock, now = new Date()) {
-  if (!isTwseMisAutoWindow(now)) return false;
-  const source = String(stock?.priceSource || "");
-  const hasMisSource = source.startsWith("TWSE MIS") || String(stock?.intradaySource || "") === "TWSE MIS";
-  const hasTradeTime = Boolean(stock?.tradetime || stock?.updatedAt);
-  const hasPrice = Number.isFinite(Number(stock?.price)) && Number(stock?.price) > 0;
-  return hasMisSource && hasTradeTime && hasPrice;
+  // Keep the lock after 14:00 as long as the MIS quote is still newer than daily fallback data.
+  // The caller decides whether an incoming daily source is same-day/newer via shouldPreserveRealtimeMainQuote().
+  return hasUsableTwseMisQuote(stock);
 }
 
 export function isGoogleQuoteUsableForIntraday(google, now = new Date()) {
@@ -371,10 +431,19 @@ export function hasTwseOfficialMainQuote(stock) {
 }
 
 export function shouldGoogleUpdateMainQuote(previous, google, now = new Date()) {
-  // V73A5: after the intraday window, official TWSE close/volume should not be overwritten by Google CSV refresh.
-  if (!isTwseMisAutoWindow(now)) return !hasTwseOfficialMainQuote(previous);
-  if (hasTwseMisIntradayLock(previous, now)) return false;
-  return isGoogleQuoteUsableForIntraday(google, now);
+  if (hasUsableTwseMisQuote(previous)) return false;
+  if (!isGoogleQuoteUsableForIntraday(google, now)) return false;
+
+  const googleDate = extractTaipeiDateKey(google?.tradetime || google?.updatedAt || "");
+  const officialDate = getDailySourceDateKey({
+    dataTime: previous?.twseDataTime || previous?.twseHistoryDataTime || previous?.finmindDataTime,
+    updatedAt: previous?.twseUpdatedAt || previous?.twseHistoryLatestDate || previous?.finmindUpdatedAt || previous?.updatedAt,
+    latestDate: previous?.twseHistoryLatestDate,
+  });
+
+  // If official/snapshot data is older than the Google intraday quote, Google can temporarily own the main quote.
+  if (hasTwseOfficialMainQuote(previous) && officialDate && googleDate && officialDate >= googleDate) return false;
+  return true;
 }
 
 export function normalizeSourceRowsForValidation(rows = [], sourceName = "source") {
@@ -614,11 +683,7 @@ export function mergeTwseOfficialBySymbol(currentStocks, incomingTwseRows) {
     // V71F：TWSE OpenAPI 是「盤後官方校正」，盤中不得覆蓋已到位的即時主價量。
     // 注意 TWSE MIS 來源可能是 "TWSE MIS" 或 "TWSE MIS 五檔參考價"，
     // 不能只用等號判斷，否則會發生「盤中新值 → 盤後舊值 → 盤中新值」來回跳。
-    const keepRealtimeQuote =
-      isTwseMisAutoWindow() && (
-        isTwseMisIntradayQuoteReady(next) ||
-        isGoogleIntradayQuoteReady(next)
-      );
+    const keepRealtimeQuote = shouldPreserveRealtimeMainQuote(next, incoming);
 
     if (!keepRealtimeQuote) {
       applyDefinedNumber(next, "price", incoming.price);
@@ -801,10 +866,7 @@ export function mergeTwseHistorySnapshotBySymbol(currentStocks, incomingHistoryR
       next.avgVolume20Source = sourceName;
     }
 
-    const keepRealtimeQuote = isTwseMisAutoWindow() && (
-      isTwseMisIntradayQuoteReady(next) ||
-      isGoogleIntradayQuoteReady(next)
-    );
+    const keepRealtimeQuote = shouldPreserveRealtimeMainQuote(next, incoming);
 
     // 盤後或非即時時段，snapshot 可以作為官方日線價量主值；盤中不覆蓋 MIS / Google 即時價量。
     if (!keepRealtimeQuote) {

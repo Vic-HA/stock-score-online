@@ -387,24 +387,41 @@ async function fetchCsvText(url, timeoutMs) {
   }
 }
 
-function sleep(ms) {
+
+function sleepMs(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function getTwseMisUsablePrice(row) {
-  const price = parseNum(row?.price, null);
-  if (price !== null && price > 0) return price;
-  const displayPrice = parseNum(row?.displayPrice, null);
-  if (displayPrice !== null && displayPrice > 0) return displayPrice;
-  const quoteMidPrice = parseNum(row?.quoteMidPrice, null);
-  if (quoteMidPrice !== null && quoteMidPrice > 0) return quoteMidPrice;
+function getTwseMisRowUsablePrice(row) {
+  const candidates = [row?.displayPrice, row?.price, row?.quoteMidPrice, row?.twseMisDisplayPrice, row?.twseMisQuoteMidPrice];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
   return null;
 }
 
-function summarizeTwseMisRows(rows = [], normalizedSymbols = []) {
-  const requested = normalizedSymbols.map(normalizeStockSymbol).filter(Boolean);
-  const rowSymbols = new Set(rows.map((row) => normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c)).filter(Boolean));
-  const priceSymbols = new Set(rows.filter((row) => getTwseMisUsablePrice(row) !== null).map((row) => normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c)).filter(Boolean));
+function getTwseMisRowUsableVolume(row) {
+  const candidates = [row?.volume, row?.twseMisVolume, row?.twseMisLots !== null && row?.twseMisLots !== undefined ? Number(row.twseMisLots) * 1000 : null];
+  for (const value of candidates) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function summarizeTwseMisRows(rows = [], requestedSymbols = []) {
+  const requested = requestedSymbols.map(normalizeStockSymbol).filter(Boolean);
+  const rowSymbols = new Set();
+  const priceSymbols = new Set();
+
+  rows.forEach((row) => {
+    const symbol = normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c);
+    if (!symbol) return;
+    rowSymbols.add(symbol);
+    if (getTwseMisRowUsablePrice(row) !== null) priceSymbols.add(symbol);
+  });
+
   return {
     requestedCount: requested.length,
     rowCount: rowSymbols.size,
@@ -414,37 +431,30 @@ function summarizeTwseMisRows(rows = [], normalizedSymbols = []) {
   };
 }
 
-function shouldRetryTwseMisRows(rows = [], normalizedSymbols = []) {
-  const summary = summarizeTwseMisRows(rows, normalizedSymbols);
-  if (!summary.requestedCount) return false;
-  if (!summary.rowCount) return true;
-  if (summary.missingSymbols.length) return true;
-  return summary.priceMissingSymbols.length > 0;
-}
+function isBetterTwseMisResult(current, next) {
+  if (!current) return true;
+  const currentSummary = current.summary || summarizeTwseMisRows(current.rows, current.requestedSymbols || []);
+  const nextSummary = next.summary || summarizeTwseMisRows(next.rows, next.requestedSymbols || []);
 
-function chooseBetterTwseMisRows(currentRows = [], nextRows = [], normalizedSymbols = []) {
-  const currentSummary = summarizeTwseMisRows(currentRows, normalizedSymbols);
-  const nextSummary = summarizeTwseMisRows(nextRows, normalizedSymbols);
-  if (nextSummary.usablePriceCount > currentSummary.usablePriceCount) return nextRows;
-  if (nextSummary.usablePriceCount === currentSummary.usablePriceCount && nextSummary.rowCount > currentSummary.rowCount) return nextRows;
-  return currentRows;
+  if (nextSummary.usablePriceCount !== currentSummary.usablePriceCount) return nextSummary.usablePriceCount > currentSummary.usablePriceCount;
+  if (nextSummary.rowCount !== currentSummary.rowCount) return nextSummary.rowCount > currentSummary.rowCount;
+  return false;
 }
 
 async function fetchTwseMisRows(symbols = [], timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, proxyUrl = DEFAULT_TWSE_MIS_PROXY_URL) {
   const normalizedSymbols = symbols.map(normalizeStockSymbol).filter(Boolean);
   if (!normalizedSymbols.length) return [];
 
-  const query = encodeURIComponent(normalizedSymbols.join(","));
   const baseUrl = proxyUrl || DEFAULT_TWSE_MIS_PROXY_URL;
-  const attempts = 3;
-  let bestRows = [];
-  let bestJson = null;
+  const query = encodeURIComponent(normalizedSymbols.join(","));
+  const maxAttempts = 3;
+  let bestResult = null;
   let lastError = null;
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const sep = baseUrl.includes("?") ? "&" : "?";
-    const forcePart = attempt > 1 ? "&force=1&cacheTtlMs=0" : "";
-    const url = `${baseUrl}${sep}symbols=${query}${forcePart}&_=${Date.now()}`;
+    const forceParams = attempt === 0 ? "" : "&force=1&cacheTtlMs=0";
+    const url = `${baseUrl}${sep}symbols=${query}&_=${Date.now()}${forceParams}`;
 
     try {
       const res = await fetchWithTimeout(url, {
@@ -462,7 +472,7 @@ async function fetchTwseMisRows(symbols = [], timeoutMs = DEFAULT_FETCH_TIMEOUT_
       const filteredRows = rows
         .filter(Boolean)
         .filter((row) => requested.has(normalizeStockSymbol(row.symbol || row.stock_id || row.c)))
-        .filter((row) => getTwseMisUsablePrice(row) !== null || row.volume !== null || row.tradetime)
+        .filter((row) => getTwseMisRowUsablePrice(row) !== null || getTwseMisRowUsableVolume(row) !== null || row.tradetime)
         .filter((row) => {
           const symbol = normalizeStockSymbol(row.symbol || row.stock_id || row.c);
           if (seen.has(symbol)) return false;
@@ -470,31 +480,33 @@ async function fetchTwseMisRows(symbols = [], timeoutMs = DEFAULT_FETCH_TIMEOUT_
           return true;
         });
 
-      bestRows = chooseBetterTwseMisRows(bestRows, filteredRows, normalizedSymbols);
-      bestJson = json;
+      const summary = summarizeTwseMisRows(filteredRows, normalizedSymbols);
+      const candidate = { rows: filteredRows, json, summary, requestedSymbols: normalizedSymbols, attempt: attempt + 1 };
+      if (isBetterTwseMisResult(bestResult, candidate)) bestResult = candidate;
 
-      if (!shouldRetryTwseMisRows(filteredRows, normalizedSymbols)) break;
-      if (attempt < attempts) await sleep(450 * attempt);
+      if (!summary.missingSymbols.length && !summary.priceMissingSymbols.length) break;
+      if (attempt < maxAttempts - 1) await sleepMs(250 * (attempt + 1));
     } catch (error) {
       lastError = error;
-      if (attempt < attempts) await sleep(450 * attempt);
+      if (attempt < maxAttempts - 1) await sleepMs(250 * (attempt + 1));
     }
   }
 
-  if (!bestJson && lastError) throw lastError;
+  if (!bestResult) throw lastError || new Error("TWSE MIS proxy failed");
 
-  const summary = summarizeTwseMisRows(bestRows, normalizedSymbols);
-  bestRows.sourceRuntime = buildApiSourceRuntime({
+  const filteredRows = bestResult.rows;
+  filteredRows.sourceRuntime = buildApiSourceRuntime({
     source: "twse_mis",
-    json: bestJson || {},
-    dataTime: pickTwseMisDataTime(bestJson || {}, bestRows),
-    count: bestRows.length,
+    json: bestResult.json,
+    dataTime: pickTwseMisDataTime(bestResult.json, filteredRows),
+    count: filteredRows.length,
     note: [
-      bestJson?.marketIndex?.tradetime ? `大盤 ${compactSourceTime(bestJson.marketIndex.tradetime)}` : "",
-      summary.priceMissingSymbols.length ? `MIS price待補 ${summary.priceMissingSymbols.join(",")}` : "",
+      bestResult.json?.marketIndex?.tradetime ? `大盤 ${compactSourceTime(bestResult.json.marketIndex.tradetime)}` : "",
+      bestResult.attempt > 1 ? `前端重試 ${bestResult.attempt} 次` : "",
+      bestResult.summary?.priceMissingSymbols?.length ? `缺價 ${bestResult.summary.priceMissingSymbols.join(",")}` : "",
     ].filter(Boolean).join("；"),
   });
-  return bestRows;
+  return filteredRows;
 }
 
 
@@ -2784,36 +2796,41 @@ function scoreShortV1Display(stock, weightConfig = DEFAULT_WEIGHT_CONFIG) {
 }
 
 
+
+function twseMisRowsHaveQuoteImprovement(rows = [], currentStocks = []) {
+  const currentMap = new Map(currentStocks.map((stock) => [normalizeStockSymbol(stock.symbol), stock]));
+
+  return rows.some((row) => {
+    const symbol = normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c);
+    if (!symbol) return false;
+
+    const incomingPrice = getTwseMisRowUsablePrice(row);
+    const incomingVolume = getTwseMisRowUsableVolume(row);
+    const current = currentMap.get(symbol);
+    if (!current) return incomingPrice !== null || incomingVolume !== null;
+
+    const currentPrice = Number(current.price);
+    const currentVolume = Number(current.volume);
+    const currentPriceSource = String(current.priceSource || "");
+    const hasCurrentMisPrice = currentPriceSource.startsWith("TWSE MIS") || String(current.intradaySource || "") === "TWSE MIS";
+
+    if (incomingPrice !== null) {
+      if (!Number.isFinite(currentPrice) || currentPrice <= 0) return true;
+      if (Math.abs(currentPrice - incomingPrice) > 0.000001) return true;
+      if (!hasCurrentMisPrice) return true;
+    }
+
+    if (incomingVolume !== null && (!Number.isFinite(currentVolume) || currentVolume <= 0)) return true;
+    return false;
+  });
+}
+
 function twseMisRowsHaveNewTradeTime(rows = [], latestMap = {}) {
   return rows.some((row) => {
     const symbol = normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c);
     const tradeTime = String(row?.tradetime || row?.updatedAt || "").trim();
     if (!symbol || !tradeTime) return false;
     return latestMap[symbol] !== tradeTime;
-  });
-}
-
-function twseMisRowsHaveQuoteImprovement(rows = [], currentStocks = []) {
-  const currentBySymbol = new Map(
-    (Array.isArray(currentStocks) ? currentStocks : [])
-      .map((stock) => [normalizeStockSymbol(stock?.symbol), stock])
-      .filter(([symbol]) => symbol)
-  );
-
-  return rows.some((row) => {
-    const symbol = normalizeStockSymbol(row?.symbol || row?.stock_id || row?.c);
-    if (!symbol) return false;
-    const current = currentBySymbol.get(symbol) || {};
-
-    const incomingPrice = getTwseMisUsablePrice(row);
-    const currentPrice = parseNum(current.price, null);
-    if (incomingPrice !== null && !(currentPrice !== null && currentPrice > 0)) return true;
-
-    const incomingVolume = parseNum(row?.volume, null);
-    const currentVolume = parseNum(current.volume, null);
-    if (incomingVolume !== null && incomingVolume > 0 && !(currentVolume !== null && currentVolume > 0)) return true;
-
-    return false;
   });
 }
 
@@ -3654,11 +3671,11 @@ export default function StockShortV1App() {
       }
 
       if (silent) {
-        if (hasNewTradeTime || hasQuoteImprovement) setApiMessage(`行情自動刷新｜${timePreview || `${rows.length} 檔`}${hasQuoteImprovement && !hasNewTradeTime ? "｜補齊缺漏價量" : ""}${officialEtfNote}`);
+        if (hasNewTradeTime) setApiMessage(`行情自動刷新｜${timePreview || `${rows.length} 檔`}${officialEtfNote}`);
       } else {
         setApiMessage(`盤中價量成功：${rows.length} 檔；已更新主畫面 price / volume${timePreview ? `（${timePreview}）` : ""}${officialEtfNote}`);
       }
-      return { ok: true, count: rows.length, hasNewTradeTime, hasQuoteImprovement, officialEtfNote };
+      return { ok: true, count: rows.length, hasNewTradeTime, officialEtfNote };
     } catch (error) {
       if (!silent) setApiMessage(`TWSE MIS 成交量參考失敗：${error.message}`);
       return { ok: false, error: error.message };
