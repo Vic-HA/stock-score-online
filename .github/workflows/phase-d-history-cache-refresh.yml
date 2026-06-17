@@ -1,0 +1,111 @@
+name: Phase D Refresh History Cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_symbols:
+        description: "Max symbols to refresh in this run"
+        required: false
+        default: "50"
+        type: string
+      force:
+        description: "Force refresh even if cache is fresh"
+        required: false
+        default: true
+        type: boolean
+  # Enable schedule only after manual workflow_dispatch passes on GitHub.
+  # GitHub schedule uses UTC and only runs from the repository default branch.
+  # Taiwan time examples:
+  #   15:40 Asia/Taipei = 07:40 UTC
+  #   18:10 Asia/Taipei = 10:10 UTC
+  #   22:10 Asia/Taipei = 14:10 UTC
+  # schedule:
+  #   - cron: "40 7 * * 1-5"
+  #   - cron: "10 10 * * 1-5"
+  #   - cron: "10 14 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-d-history-cache-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh-history-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app
+        run: npm run build
+
+      - name: Start Next.js server
+        shell: bash
+        run: |
+          npm run start -- -H 127.0.0.1 -p 3000 > /tmp/phase-d-next.log 2>&1 &
+          echo $! > /tmp/phase-d-next.pid
+          npx --yes wait-on http://127.0.0.1:3000/ --timeout 90000
+
+      - name: Refresh Phase D history cache
+        shell: bash
+        run: |
+          MAX_SYMBOLS="${{ inputs.max_symbols || '50' }}"
+          FORCE_FLAG=""
+          if [ "${{ inputs.force || true }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+
+          node scripts/phase-d-refresh-history-cache.mjs \
+            --mode=auto \
+            $FORCE_FLAG \
+            --autoMaxSymbols="$MAX_SYMBOLS" \
+            --baseUrl=http://127.0.0.1:3000
+
+      - name: Verify Phase D history cache
+        run: node scripts/phase-d-refresh-history-cache.mjs --mode=verify --dryRun --baseUrl=http://127.0.0.1:3000
+
+      - name: Stop Next.js server
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/phase-d-next.pid ]; then
+            kill "$(cat /tmp/phase-d-next.pid)" || true
+          fi
+          if [ -f /tmp/phase-d-next.log ]; then
+            echo "--- Next.js server log tail ---"
+            tail -80 /tmp/phase-d-next.log || true
+          fi
+
+      - name: Commit cache updates
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            data/history-cache/status.json \
+            data/history-cache/symbol-registry.json \
+            data/history-cache/stocks/*.json \
+            data/twse-history-snapshot.json
+
+          if git diff --cached --quiet; then
+            echo "No Phase D history cache changes to commit."
+          else
+            git commit -m "Phase D refresh history cache"
+            git push
+          fi
