@@ -3,8 +3,8 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_4",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-18T13:36:59.964Z",
-  "finishedAt": "2026-06-18T13:39:50.091Z",
+  "startedAt": "2026-06-18T17:24:10.935Z",
+  "finishedAt": "2026-06-18T17:26:57.024Z",
   "requestedSymbols": [
     "0050",
     "1101",
@@ -180,10 +180,12 @@
     {
       "symbol": "2207",
       "state": "pass",
-      "rowCount": 170,
+      "rowCount": 191,
       "latestDate": "2026-06-18",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-18"
+      ]
     },
     {
       "symbol": "2303",
