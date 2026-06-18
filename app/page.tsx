@@ -1095,6 +1095,12 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const finMargin20 = pickCompare(validationMap, symbol, "finmind", "marginChange20dPct");
   const finShort5 = pickCompare(validationMap, symbol, "finmind", "shortSaleChange5dPct");
   const finShort20 = pickCompare(validationMap, symbol, "finmind", "shortSaleChange20dPct");
+  const finMarginDate = main.marginUpdatedAt || main.finmindDataTime?.marginDate || finUpdatedAt.value || main.finmindUpdatedAt || main.updatedAt || "";
+  const finShort5DisplayValue = finShort5.value !== null ? finShort5.value : null;
+  const finShort5DisplaySource = withSourceDate("FinMind", finMarginDate, finShort5DisplayValue !== null ? "" : "缺值");
+  const finShort5DisplayNote = finShort5DisplayValue !== null
+    ? "FinMind 融資融券資料。"
+    : "FinMind 已回傳融資融券資料，但融券5日 shortSaleChange5dPct 本欄缺值；不沿用舊值、不以 0 代入，依缺值規則處理。";
 
   const finRevenueMoM = pickCompare(validationMap, symbol, "finmind", "revenueMoM");
   const finRevenueYoY = pickCompare(validationMap, symbol, "finmind", "revenueYoY");
@@ -1198,7 +1204,7 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
 
     compareSourceValue("融資5日 marginChange5dPct", main.marginChange5dPct, finMargin5.value, 0.1, "FinMind 融資融券資料。", getFieldSource(main, "marginChange5dPct"), finMargin5.value !== null ? finMargin5.source : noCompare, { statusOverride: "已補值" }),
     compareSourceValue("融資20日 marginChange20dPct", main.marginChange20dPct, finMargin20.value, 0.1, "FinMind 融資融券資料。", getFieldSource(main, "marginChange20dPct"), finMargin20.value !== null ? finMargin20.source : noCompare, { statusOverride: "已補值" }),
-    compareSourceValue("融券5日 shortSaleChange5dPct", main.shortSaleChange5dPct, finShort5.value, 0.1, "FinMind 融資融券資料。", getFieldSource(main, "shortSaleChange5dPct"), finShort5.value !== null ? finShort5.source : noCompare, { statusOverride: "已補值" }),
+    compareSourceValue("融券5日 shortSaleChange5dPct", finShort5DisplayValue, null, 0.1, finShort5DisplayNote, finShort5DisplaySource, getSourceName("none"), { statusOverride: finShort5DisplayValue !== null ? "已補值" : undefined, toleranceLabel: finShort5DisplayValue !== null ? "資料補值" : "缺值不代入" }),
     compareSourceValue("融券20日 shortSaleChange20dPct", main.shortSaleChange20dPct, finShort20.value, 0.1, "FinMind 融資融券資料。", getFieldSource(main, "shortSaleChange20dPct"), finShort20.value !== null ? finShort20.source : noCompare, { statusOverride: "已補值" }),
 
     (!isEtf ? compareSourceValue("月營收 MoM revenueMoM", main.revenueMoM, finRevenueMoM.value, 0.1, "FinMind 月營收資料。ETF 可能無此欄位。", getFieldSource(main, "revenueMoM"), finRevenueMoM.value !== null ? finRevenueMoM.source : noCompare, { statusOverride: "已補值" }) : null),

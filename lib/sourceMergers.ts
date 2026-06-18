@@ -886,6 +886,20 @@ export function mergeTwseHistorySnapshotBySymbol(currentStocks, incomingHistoryR
   return Array.from(map.values());
 }
 
+const FINMIND_EXPLICIT_NULL_FIELDS = new Set([
+  // FinMind can legitimately return null for a single margin/short-sale derived field
+  // while the rest of the margin payload is valid. Clear stale merged values instead of
+  // preserving an older browser/server-state value such as 1200%.
+  "shortSaleChange5dPct",
+]);
+
+function shouldClearFinMindExplicitNull(incoming, key) {
+  if (!FINMIND_EXPLICIT_NULL_FIELDS.has(key)) return false;
+  if (!Object.prototype.hasOwnProperty.call(incoming || {}, key)) return false;
+  const value = incoming?.[key];
+  return value === null || value === undefined || value === "";
+}
+
 export function mergeFinMindDailyBySymbol(currentStocks, incomingFinMindRows) {
   const map = new Map(currentStocks.map((stock) => [normalizeStockSymbol(stock.symbol), stock]));
 
@@ -994,8 +1008,19 @@ export function mergeFinMindDailyBySymbol(currentStocks, incomingFinMindRows) {
     ];
 
     fields.forEach((key) => {
+      if (shouldClearFinMindExplicitNull(incoming, key)) {
+        next[key] = null;
+        next[`${key}Source`] = sourceName;
+        next[`${key}Missing`] = true;
+        next[`${key}MissingReason`] = "FinMind explicit null; cleared stale merged value.";
+        return;
+      }
       applyDefinedNumber(next, key, incoming[key]);
-      if (incoming[key] !== null && incoming[key] !== undefined) next[`${key}Source`] = sourceName;
+      if (incoming[key] !== null && incoming[key] !== undefined) {
+        next[`${key}Source`] = sourceName;
+        next[`${key}Missing`] = false;
+        delete next[`${key}MissingReason`];
+      }
     });
 
     // 估值主值優先 TWSE BWIBBU；FinMind PER 只在 TWSE 缺值時補位。
