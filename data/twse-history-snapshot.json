@@ -1,7 +1,7 @@
 {
   "build": "TWSE_HISTORY_SNAPSHOT_V03_PHASE_D_PER_SYMBOL_COMPAT",
   "builder": "PHASE_D_HISTORY_CACHE_V0_4",
-  "updatedAt": "2026-06-22T15:33:12.154Z",
+  "updatedAt": "2026-06-22T18:19:50.997Z",
   "sourceLatestDate": "2026-06-22",
   "retentionRows": 220,
   "symbols": {
@@ -69462,7 +69462,7 @@
     "snapshotSymbolsPreserved": 50,
     "snapshotSymbolsWritten": 50,
     "phaseDStatus": {
-      "lastRunAt": "2026-06-22T15:30:28.290Z",
+      "lastRunAt": "2026-06-22T18:16:49.145Z",
       "passSymbols": [
         "0050",
         "1101",
