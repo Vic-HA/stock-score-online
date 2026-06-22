@@ -3,8 +3,8 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_4",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-19T16:38:16.349Z",
-  "finishedAt": "2026-06-19T16:41:38.524Z",
+  "startedAt": "2026-06-22T13:14:19.499Z",
+  "finishedAt": "2026-06-22T13:17:16.897Z",
   "requestedSymbols": [
     "0050",
     "1101",
@@ -116,176 +116,176 @@
     {
       "symbol": "0050",
       "state": "pass",
-      "rowCount": 151,
-      "latestDate": "2026-06-18",
+      "rowCount": 152,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1101",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1102",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1216",
       "state": "pass",
-      "rowCount": 151,
-      "latestDate": "2026-06-18",
+      "rowCount": 152,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1301",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1303",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1326",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2002",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2207",
       "state": "pass",
-      "rowCount": 191,
-      "latestDate": "2026-06-18",
+      "rowCount": 192,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2303",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2308",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2317",
       "state": "pass",
-      "rowCount": 187,
-      "latestDate": "2026-06-18",
+      "rowCount": 188,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2327",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2330",
       "state": "pass",
-      "rowCount": 151,
-      "latestDate": "2026-06-18",
+      "rowCount": 152,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2345",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2356",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2357",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2379",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2382",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2395",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2408",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2412",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
@@ -295,221 +295,223 @@
       "rowCount": 151,
       "latestDate": "2026-06-18",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-18"
+      ]
     },
     {
       "symbol": "2474",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2603",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2609",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2615",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2618",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2801",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2881",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2882",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2884",
       "state": "pass",
-      "rowCount": 170,
-      "latestDate": "2026-06-18",
+      "rowCount": 171,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2885",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2886",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2891",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2892",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2912",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3008",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3034",
       "state": "pass",
-      "rowCount": 187,
-      "latestDate": "2026-06-18",
+      "rowCount": 188,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3045",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3711",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "4904",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "5871",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "5876",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "5880",
       "state": "pass",
-      "rowCount": 172,
-      "latestDate": "2026-06-18",
+      "rowCount": 173,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "6415",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "6505",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "6669",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "8046",
       "state": "pass",
-      "rowCount": 187,
-      "latestDate": "2026-06-18",
+      "rowCount": 188,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "9910",
       "state": "pass",
-      "rowCount": 171,
-      "latestDate": "2026-06-18",
+      "rowCount": 172,
+      "latestDate": "2026-06-22",
       "source": "twse_route",
       "warnings": []
     }
@@ -525,6 +527,6 @@
   "compatibilitySnapshot": {
     "path": "data/twse-history-snapshot.json",
     "symbols": 50,
-    "sourceLatestDate": "2026-06-18"
+    "sourceLatestDate": "2026-06-22"
   }
 }
