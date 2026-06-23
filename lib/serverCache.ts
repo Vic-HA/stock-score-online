@@ -263,6 +263,67 @@ export function isForceRefresh(searchParams: URLSearchParams) {
   );
 }
 
+type HeadersLike = {
+  get?: (name: string) => string | null;
+};
+
+function safeUrl(requestUrl: string) {
+  try {
+    return new URL(requestUrl);
+  } catch {
+    return new URL(requestUrl || "/", "http://localhost");
+  }
+}
+
+function isLocalHostname(hostname: string) {
+  const host = String(hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+}
+
+function getHeader(headers: HeadersLike | undefined, name: string) {
+  try {
+    return headers?.get?.(name) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function hasPrivilegedCacheBypass(requestUrl: string, headers?: HeadersLike) {
+  const url = safeUrl(requestUrl);
+  const configuredSecret = String(
+    process.env.STOCK_SCORE_ADMIN_SECRET ||
+    process.env.PHASE_D_ADMIN_SECRET ||
+    process.env.ADMIN_SECRET ||
+    ""
+  ).trim();
+  const providedSecret = String(
+    url.searchParams.get("adminSecret") ||
+    url.searchParams.get("admin_secret") ||
+    url.searchParams.get("secret") ||
+    getHeader(headers, "x-stock-score-admin-secret") ||
+    getHeader(headers, "x-phase-d-admin-secret") ||
+    ""
+  ).trim();
+
+  if (configuredSecret && providedSecret && providedSecret === configuredSecret) return true;
+  if (process.env.GITHUB_ACTIONS === "true") return true;
+  if (process.env.NODE_ENV === "development" && isLocalHostname(url.hostname)) return true;
+
+  return false;
+}
+
+export function guardedForceRefresh(requestUrl: string, headers?: HeadersLike) {
+  const url = safeUrl(requestUrl);
+  if (!hasPrivilegedCacheBypass(requestUrl, headers)) return false;
+  return isForceRefresh(url.searchParams);
+}
+
+export function guardedTtlMs(requestUrl: string, headers: HeadersLike | undefined, defaultTtlMs: number) {
+  const url = safeUrl(requestUrl);
+  if (!hasPrivilegedCacheBypass(requestUrl, headers)) return defaultTtlMs;
+  return parseTtlMs(url.searchParams, defaultTtlMs);
+}
+
 export function parseTtlMs(searchParams: URLSearchParams, defaultTtlMs: number) {
   const raw = searchParams.get("cacheTtlMs") || searchParams.get("ttlMs");
   if (!raw) return defaultTtlMs;

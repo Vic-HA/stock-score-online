@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getOrFetchCached, isForceRefresh, normalizeCacheKeyPart } from "@/lib/serverCache";
+import { getOrFetchCached, guardedForceRefresh, hasPrivilegedCacheBypass, isForceRefresh, normalizeCacheKeyPart } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
 
@@ -760,7 +760,11 @@ function shouldUseV73Snapshot(req: NextRequest) {
     params.get("source") === "twse" ||
     params.get("source") === "live";
 
-  return !forceLike;
+  if (!forceLike) return true;
+
+  // Phase D.5: production/public query strings must not bypass the committed snapshot.
+  // Live TWSE fetches are only allowed from local dev, GitHub Actions, or admin-secret requests.
+  return !hasPrivilegedCacheBypass(req.url, req.headers);
 }
 
 function snapshotRowsToHistoryRows(rows: V73SnapshotCompactRow[], asOfDate: string | null): TwseHistoryRow[] {
@@ -849,14 +853,16 @@ function parseBoundedNumber(value: unknown, fallback: number, min: number, max: 
 
 function isPhaseDRouteAutoRefreshEnabled(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("historyAutoRefresh") || req.nextUrl.searchParams.get("phaseDAutoRefresh");
-  if (raw === "1" || raw === "true") return true;
+  const privileged = hasPrivilegedCacheBypass(req.url, req.headers);
+  if ((raw === "1" || raw === "true") && privileged) return true;
+  if (raw === "1" || raw === "true") return false;
   if (raw === "0" || raw === "false") return false;
 
-  if (envFlag("PHASE_D_HISTORY_CACHE_AUTO_REFRESH")) return true;
+  if (envFlag("PHASE_D_HISTORY_CACHE_AUTO_REFRESH")) return privileged;
   if (envFlagOff("PHASE_D_HISTORY_CACHE_AUTO_REFRESH")) return false;
 
   // Local dev default only. Production should use GitHub Actions / durable cache refresh.
-  return process.env.NODE_ENV === "development";
+  return process.env.NODE_ENV === "development" && privileged;
 }
 
 function phaseDAutoRefreshTtlMs(req: NextRequest) {
@@ -916,7 +922,7 @@ async function maybeRunPhaseDHistoryAutoRefresh(req: NextRequest, symbols: strin
   const lastAutoRefreshAt = lastAutoRefreshAtFromStatus(status);
   const lastAutoMs = Date.parse(lastAutoRefreshAt || "");
   const ageMs = Number.isFinite(lastAutoMs) ? Date.now() - lastAutoMs : null;
-  const force = req.nextUrl.searchParams.get("historyAutoForce") === "1" || req.nextUrl.searchParams.get("phaseDAutoForce") === "1";
+  const force = hasPrivilegedCacheBypass(req.url, req.headers) && (req.nextUrl.searchParams.get("historyAutoForce") === "1" || req.nextUrl.searchParams.get("phaseDAutoForce") === "1");
 
   if (!force && ageMs !== null && ageMs >= 0 && ageMs < ttlMs) {
     return {
@@ -997,11 +1003,49 @@ async function tryBuildV73SnapshotPayload(req: NextRequest, symbols: string[], m
 
   try {
     snapshot = JSON.parse(await fs.readFile(V73A4_SNAPSHOT_PATH, "utf8"));
-  } catch {
-    return null;
+  } catch (error: any) {
+    return {
+      ok: false,
+      source: "twse_history_snapshot",
+      build: BUILD_VERSION,
+      routeBuild: V73A4_SNAPSHOT_ROUTE_BUILD,
+      params: {
+        symbols,
+        monthsBack,
+        asOfDate,
+        snapshotPath: "data/twse-history-snapshot.json",
+        missingSnapshotSymbols: symbols,
+      },
+      count: symbols.length,
+      passCount: 0,
+      errors: symbols.map((symbol) => ({ symbol, error: "TWSE history snapshot file missing or unreadable" })),
+      warnings: ["SNAPSHOT_FILE_MISSING_NO_LIVE_FALLBACK"],
+      history: symbols.map((symbol) => ({
+        ok: false,
+        source: "twse_history_snapshot",
+        symbol,
+        latestDate: null,
+        rowCount: 0,
+        priceRowCount: 0,
+        technicalStatus: { rowCount: 0, note: "Snapshot file missing; normal route does not call TWSE live." },
+        error: "TWSE history snapshot file missing or unreadable",
+      })),
+      cache: {
+        hit: false,
+        kind: "local_snapshot_file_missing",
+        source: "data/twse-history-snapshot.json",
+        error: error?.message || String(error),
+      },
+      cachePolicy: {
+        build: BUILD_VERSION,
+        kind: "snapshot_first",
+        note: "Normal route does not fall back to live TWSE when the local snapshot is missing. Use GitHub Actions refresh or privileged local/admin debug fetch.",
+      },
+    };
   }
 
   const snapshotSymbols = snapshot?.symbols || {};
+  const missingSnapshotSymbols = symbols.filter((symbol) => !Array.isArray(snapshotSymbols[symbol]) || snapshotSymbols[symbol].length === 0);
   const results = symbols.map((symbol) => {
     const rows = snapshotRowsToHistoryRows(snapshotSymbols[symbol] || [], asOfDate);
     const latest = rows[rows.length - 1] || null;
@@ -1071,7 +1115,7 @@ async function tryBuildV73SnapshotPayload(req: NextRequest, symbols: string[], m
         rsiReady: rows.length >= 15,
         atrReady: rows.length >= 15,
         rowCount: rows.length,
-        note: "Snapshot technical calculation from local TWSE STOCK_DAY rows. Force/debug can still call live TWSE route.",
+        note: rows.length > 0 ? "Snapshot technical calculation from local TWSE STOCK_DAY rows." : "Snapshot 未收錄此 symbol；normal route 不以 live TWSE 補資料。",
       },
       monthWarnings: [],
       error: rows.length > 0 ? "" : "No snapshot rows for symbol",
@@ -1094,6 +1138,7 @@ async function tryBuildV73SnapshotPayload(req: NextRequest, symbols: string[], m
       monthsBack,
       asOfDate,
       snapshotPath: "data/twse-history-snapshot.json",
+      missingSnapshotSymbols,
     },
     dataTimeSummary: buildV73SnapshotDataTimeSummary(results, snapshot || {}),
     technicalSummary: buildV73SnapshotTechnicalSummary(results),
@@ -1112,7 +1157,7 @@ async function tryBuildV73SnapshotPayload(req: NextRequest, symbols: string[], m
     cachePolicy: {
       build: BUILD_VERSION,
       kind: "snapshot_first",
-      note: "Default route path reads local TWSE snapshot. Use force=1/source=twse/debugFetch=1 to bypass snapshot.",
+      note: "Default route path reads the committed local TWSE snapshot. Public production query strings cannot bypass snapshot; live fetch is limited to local dev, GitHub Actions, or admin-secret requests.",
     },
   };
 }
@@ -1224,7 +1269,7 @@ export async function GET(req: NextRequest) {
     const cached = await getOrFetchCached({
       key: cacheKey,
       ttlMs,
-      force: isForceRefresh(req.nextUrl.searchParams),
+      force: guardedForceRefresh(req.url, req.headers),
       fetcher: async () => {
         const res = await uncachedGET(req);
         const payload = await res.json();
@@ -1241,7 +1286,7 @@ export async function GET(req: NextRequest) {
           kind: "scheduled_daily",
           ttlMs,
           refreshWindows: ["14:10", "15:30", "18:00", "22:00"],
-          force: isForceRefresh(req.nextUrl.searchParams),
+          force: guardedForceRefresh(req.url, req.headers),
           maxSymbols: MAX_SYMBOLS,
           defaultConcurrency: DEFAULT_CONCURRENCY,
           maxConcurrency: MAX_CONCURRENCY,

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { NextResponse } from "next/server";
-import { getOrFetchCached, isForceRefresh, parseTtlMs } from "@/lib/serverCache";
+import { getOrFetchCached, guardedForceRefresh, guardedTtlMs } from "@/lib/serverCache";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ const CACHE_BUILD_VERSION = "CACHE_BUILD_02H_SCORE_FUNDAMENTAL_AUTO_HYDRATE";
 
 function buildRouteCacheKey(prefix: string, requestUrl: string) {
   const url = new URL(requestUrl);
-  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "_"]);
+  const ignored = new Set(["force", "refresh", "cache", "noCache", "ttlMs", "cacheTtlMs", "adminSecret", "admin_secret", "secret", "_"]);
   const params = Array.from(url.searchParams.entries())
     .filter(([key]) => !ignored.has(key))
     .sort(([a], [b]) => a.localeCompare(b))
@@ -1666,8 +1666,8 @@ function getFinMindStocksCacheQuality(payload: any) {
 export async function GET(request: Request) {
   const wrapperStartedAt = new Date().toISOString();
   const url = new URL(request.url);
-  const force = isForceRefresh(url.searchParams);
-  const cacheTtlMs = parseTtlMs(url.searchParams, 60 * 60 * 1000);
+  const force = guardedForceRefresh(request.url, request.headers);
+  const cacheTtlMs = guardedTtlMs(request.url, request.headers, 60 * 60 * 1000);
   const cacheKey = buildRouteCacheKey("finmind_stocks_profile_v02g", request.url);
 
   try {

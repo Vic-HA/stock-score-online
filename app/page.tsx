@@ -856,6 +856,25 @@ function applyTwsePreOpenValidationStatus(rows = [], isPreOpen = false, tradetim
   });
 }
 
+
+function applyTwseSnapshotMissingValidationStatus(rows, snapshotMissing) {
+  if (!snapshotMissing) return rows;
+  const snapshotDependent = /10日均量|20日均量 avgVolume20|5MA|20MA|60MA|RSI14|20日高點|20日低點|20日報酬|60日報酬|技術預熱|MACD|KD |ATR/;
+  return rows.map((row) => {
+    if (!snapshotDependent.test(String(row?.label || ""))) return row;
+    return {
+      ...row,
+      finmindValue: null,
+      diffPct: 0,
+      status: "Snapshot 未收錄",
+      currentSource: "TWSE Snapshot（未收錄）",
+      compareSource: row?.compareSource || "FinMind 驗證 / 備援",
+      toleranceLabel: "需加入 snapshot universe",
+      note: `${row?.note || ""} TWSE history snapshot 未收錄此標的，技術列不把 0 當有效值，也不進一般通過/失敗比對。`,
+    };
+  });
+}
+
 function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const main = stock || {};
   const noCompare = "尚無比對來源";
@@ -1010,6 +1029,7 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const twseHistoryReturn20d = pickCompare(validationMap, symbol, "twse_history", "return20d");
   const twseHistoryReturn60d = pickCompare(validationMap, symbol, "twse_history", "return60d");
   const twseHistoryPriceRowCount = pickCompare(validationMap, symbol, "twse_history", "priceRowCount");
+  const twseHistorySnapshotMissing = finiteOrNull(twseHistoryPriceRowCount.value) !== null && Number(twseHistoryPriceRowCount.value) <= 0;
   const finMacd = pickCompare(validationMap, symbol, "finmind", "macd");
   const finMacdSignal = pickCompare(validationMap, symbol, "finmind", "macdSignal");
   const finMacdHist = pickCompare(validationMap, symbol, "finmind", "macdHist");
@@ -1238,7 +1258,8 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   };
 
   const normalizedRows = cleanupFinMindOnlyValidationRows(rows.filter(Boolean)).map((row) => attachValidationDateLabels(row, validationDateLabelContext));
-  return applyTwsePreOpenValidationStatus(normalizedRows, isTwseMisPreOpen, twseMisTradetime.value);
+  const snapshotAwareRows = applyTwseSnapshotMissingValidationStatus(normalizedRows, twseHistorySnapshotMissing);
+  return applyTwsePreOpenValidationStatus(snapshotAwareRows, isTwseMisPreOpen, twseMisTradetime.value);
 }
 
 
