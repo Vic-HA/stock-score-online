@@ -3,8 +3,8 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_4",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-23T10:48:24.344Z",
-  "finishedAt": "2026-06-23T10:51:04.945Z",
+  "startedAt": "2026-06-23T12:43:40.118Z",
+  "finishedAt": "2026-06-23T12:46:27.960Z",
   "requestedSymbols": [
     "0050",
     "1101",
@@ -495,7 +495,9 @@
       "rowCount": 173,
       "latestDate": "2026-06-23",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-23"
+      ]
     },
     {
       "symbol": "8046",
