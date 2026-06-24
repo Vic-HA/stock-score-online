@@ -3070,6 +3070,9 @@ export default function StockShortV1App() {
   const googleAutoRequestSeqRef = useRef(0);
   const googleLatestTradeTimeRef = useRef({});
   const twseMisRefreshingRef = useRef(false);
+  const finmindProxyRefreshingRef = useRef(false);
+  const finmindMarketRefreshingRef = useRef(false);
+  const finmindDerivativesRefreshingRef = useRef(false);
   const startupCacheWarmupRef = useRef(false);
   const startupFinMindWarmupRef = useRef(false);
   const scheduledOfficialCacheSlotRef = useRef("");
@@ -3474,11 +3477,11 @@ export default function StockShortV1App() {
       // FinMind is needed for technical score. Warm it up once on startup, but never with force.
       // The route side has 1h cache + stale-if-error, so this should reuse cache when available.
       try {
-        if (apiConfig.finmindProxyUrl) await loadFinMindProxy(symbols);
+        if (apiConfig.finmindProxyUrl) await loadFinMindProxy(symbols, "score", { silent: true });
         if (cancelled) return;
-        if (apiConfig.finmindMarketProxyUrl) await loadFinMindMarket();
+        if (apiConfig.finmindMarketProxyUrl) await loadFinMindMarket({ silent: true });
         if (cancelled) return;
-        if (apiConfig.finmindDerivativesProxyUrl) await loadFinMindDerivatives();
+        if (apiConfig.finmindDerivativesProxyUrl) await loadFinMindDerivatives({ silent: true });
       } catch {
         // Individual loaders already set apiMessage; keep startup warmup non-fatal.
       }
@@ -3550,16 +3553,32 @@ export default function StockShortV1App() {
     }
   }
 
-  async function loadFinMindProxy(symbolOverride = null, profileOverride = "score") {
+  async function loadFinMindProxy(symbolOverride = null, profileOverride = "score", options = {}) {
+    const { silent = false, skipCooldown = false } = options || {};
     const source = "finmind_proxy";
     const policy = getSourcePolicy(source);
+
+    if (finmindProxyRefreshingRef.current) {
+      if (!silent) setApiMessage("FinMind 已在更新中，略過重複請求");
+      return { ok: false, skipped: true, reason: "running" };
+    }
+
     const refresh = canRefreshSource(lastFetchMap, source, policy.cooldownMs);
-    if (!refresh.ok) { setApiMessage(`FinMind Proxy 冷卻中：${refresh.remainSec} 秒`); return; }
-    setApiLoading(true);
-    setApiMessage("讀取中...");
+    if (!skipCooldown && !refresh.ok) {
+      if (!silent) setApiMessage(`FinMind Proxy 冷卻中：${refresh.remainSec} 秒`);
+      return { ok: false, skipped: true, reason: "cooldown", remainSec: refresh.remainSec };
+    }
+
+    finmindProxyRefreshingRef.current = true;
+    if (!silent) {
+      setApiLoading(true);
+      setApiMessage("讀取中...");
+    }
     try {
       const requestSymbols = Array.isArray(symbolOverride) && symbolOverride.length ? symbolOverride : stocks.map((stock) => stock.symbol);
       const symbols = requestSymbols.map(normalizeStockSymbol).filter(Boolean).join(",");
+      if (!symbols) return { ok: false, skipped: true, reason: "missing symbols" };
+
       const profile = profileOverride || "score";
       const url = appendRouteQuery(apiConfig.finmindProxyUrl, { symbols, profile });
       const res = await fetchWithTimeout(url, {}, policy.timeoutMs);
@@ -3572,7 +3591,7 @@ export default function StockShortV1App() {
         source,
         json,
         count: rawIncoming.length,
-        note: `profile=${json?.profile || profile}`,
+        note: `${json?.cache?.coalesced ? "coalesced；" : ""}profile=${json?.profile || profile}`,
       }));
 
       // 比對來源要吃 route 原始欄位，避免 normalizeExternalStock 過程漏掉 technical / valuation 欄位。
@@ -3582,11 +3601,14 @@ export default function StockShortV1App() {
       setStocks((prev) => mergeFinMindDailyBySymbol(prev, rawIncoming));
       setDataMode("finmind_daily_technical");
       setLastFetchMap((prev) => markSourceFetched(prev, source));
-      setApiMessage(`FinMind成功：${rawIncoming.length} 檔，profile=${json?.profile || profile}，比對來源已更新`);
+      if (!silent) setApiMessage(`FinMind成功：${rawIncoming.length} 檔，profile=${json?.profile || profile}，比對來源已更新`);
+      return { ok: true, count: rawIncoming.length, cache: json.cache || null, profile: json?.profile || profile };
     } catch (error) {
-      setApiMessage(`FinMind Proxy 失敗：${error.message}`);
+      if (!silent) setApiMessage(`FinMind Proxy 失敗：${error.message}`);
+      return { ok: false, error: error.message };
     } finally {
-      setApiLoading(false);
+      finmindProxyRefreshingRef.current = false;
+      if (!silent) setApiLoading(false);
     }
   }
 
@@ -3897,13 +3919,27 @@ export default function StockShortV1App() {
     }
   }
 
-  async function loadFinMindMarket() {
+  async function loadFinMindMarket(options = {}) {
+    const { silent = false, skipCooldown = false } = options || {};
     const source = "finmind_market";
     const policy = getSourcePolicy(source);
+
+    if (finmindMarketRefreshingRef.current) {
+      if (!silent) setApiMessage("FinMind Market 已在更新中，略過重複請求");
+      return { ok: false, skipped: true, reason: "running" };
+    }
+
     const refresh = canRefreshSource(lastFetchMap, source, policy.cooldownMs);
-    if (!refresh.ok) { setApiMessage(`FinMind Market 冷卻中：${refresh.remainSec} 秒`); return; }
-    setApiLoading(true);
-    setApiMessage("讀取中...");
+    if (!skipCooldown && !refresh.ok) {
+      if (!silent) setApiMessage(`FinMind Market 冷卻中：${refresh.remainSec} 秒`);
+      return { ok: false, skipped: true, reason: "cooldown", remainSec: refresh.remainSec };
+    }
+
+    finmindMarketRefreshingRef.current = true;
+    if (!silent) {
+      setApiLoading(true);
+      setApiMessage("讀取中...");
+    }
     try {
       const res = await fetchWithTimeout(apiConfig.finmindMarketProxyUrl, {}, policy.timeoutMs);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -3917,21 +3953,38 @@ export default function StockShortV1App() {
       }));
       setDataMode("finmind_market");
       setLastFetchMap((prev) => markSourceFetched(prev, source));
-      setApiMessage("FinMind Market 成功：市場面已更新");
+      if (!silent) setApiMessage("FinMind Market 成功：市場面已更新");
+      return { ok: true, cache: json.cache || null };
     } catch (error) {
-      setApiMessage(`FinMind Market 失敗：${error.message}`);
+      if (!silent) setApiMessage(`FinMind Market 失敗：${error.message}`);
+      return { ok: false, error: error.message };
     } finally {
-      setApiLoading(false);
+      finmindMarketRefreshingRef.current = false;
+      if (!silent) setApiLoading(false);
     }
   }
 
-  async function loadFinMindDerivatives() {
+  async function loadFinMindDerivatives(options = {}) {
+    const { silent = false, skipCooldown = false } = options || {};
     const source = "finmind_derivatives";
     const policy = getSourcePolicy(source);
+
+    if (finmindDerivativesRefreshingRef.current) {
+      if (!silent) setApiMessage("FinMind Derivatives 已在更新中，略過重複請求");
+      return { ok: false, skipped: true, reason: "running" };
+    }
+
     const refresh = canRefreshSource(lastFetchMap, source, policy.cooldownMs);
-    if (!refresh.ok) { setApiMessage(`FinMind Derivatives 冷卻中：${refresh.remainSec} 秒`); return; }
-    setApiLoading(true);
-    setApiMessage("讀取中...");
+    if (!skipCooldown && !refresh.ok) {
+      if (!silent) setApiMessage(`FinMind Derivatives 冷卻中：${refresh.remainSec} 秒`);
+      return { ok: false, skipped: true, reason: "cooldown", remainSec: refresh.remainSec };
+    }
+
+    finmindDerivativesRefreshingRef.current = true;
+    if (!silent) {
+      setApiLoading(true);
+      setApiMessage("讀取中...");
+    }
     try {
       const res = await fetchWithTimeout(apiConfig.finmindDerivativesProxyUrl, {}, policy.timeoutMs);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -3945,11 +3998,14 @@ export default function StockShortV1App() {
       }));
       setDataMode("finmind_derivatives");
       setLastFetchMap((prev) => markSourceFetched(prev, source));
-      setApiMessage("FinMind Derivatives 成功：衍生性資料已更新");
+      if (!silent) setApiMessage("FinMind Derivatives 成功：衍生性資料已更新");
+      return { ok: true, cache: json.cache || null };
     } catch (error) {
-      setApiMessage(`FinMind Derivatives 失敗：${error.message}`);
+      if (!silent) setApiMessage(`FinMind Derivatives 失敗：${error.message}`);
+      return { ok: false, error: error.message };
     } finally {
-      setApiLoading(false);
+      finmindDerivativesRefreshingRef.current = false;
+      if (!silent) setApiLoading(false);
     }
   }
 

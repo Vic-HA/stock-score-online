@@ -27,6 +27,7 @@ type CacheMeta = {
   createdAt: string;
   expiresAt: string;
   policy: CachePolicy;
+  coalesced?: boolean;
 };
 
 type CacheResult<T = unknown> = {
@@ -54,10 +55,13 @@ type ScheduledDailyOptions<T> = {
 
 const globalCache = globalThis as typeof globalThis & {
   __stockScoreServerCache?: Map<string, CacheEntry>;
+  __stockScoreServerCacheInflight?: Map<string, Promise<CacheEntry>>;
 };
 
 const store = globalCache.__stockScoreServerCache || new Map<string, CacheEntry>();
+const inflightStore = globalCache.__stockScoreServerCacheInflight || new Map<string, Promise<CacheEntry>>();
 globalCache.__stockScoreServerCache = store;
+globalCache.__stockScoreServerCacheInflight = inflightStore;
 
 function nowMs() {
   return Date.now();
@@ -94,6 +98,7 @@ function buildCacheMeta(key: string, entry: CacheEntry, hit: boolean, ttlMs: num
 export function clearServerCache(keyPrefix?: string) {
   if (!keyPrefix) {
     store.clear();
+    inflightStore.clear();
     return { cleared: "all" };
   }
 
@@ -102,6 +107,11 @@ export function clearServerCache(keyPrefix?: string) {
     if (key.startsWith(keyPrefix)) {
       store.delete(key);
       count += 1;
+    }
+  }
+  for (const key of Array.from(inflightStore.keys())) {
+    if (key.startsWith(keyPrefix)) {
+      inflightStore.delete(key);
     }
   }
 
@@ -149,21 +159,47 @@ export async function getOrFetchCached<T>(options: GetOrFetchOptions<T>): Promis
     };
   }
 
-  const value = await options.fetcher();
-  const createdAt = nowMs();
-  const entry: CacheEntry<T> = {
-    value,
-    createdAt,
-    expiresAt: createdAt + ttlMs,
-    meta: options.meta,
-  };
+  if (!force) {
+    const inflight = inflightStore.get(key) as Promise<CacheEntry<T>> | undefined;
+    if (inflight) {
+      const entry = await inflight;
+      return {
+        value: entry.value,
+        cache: {
+          ...buildCacheMeta(key, entry, false, ttlMs, "ttl"),
+          coalesced: true,
+        },
+      };
+    }
+  }
 
-  store.set(key, entry);
+  const fetchPromise = (async () => {
+    const value = await options.fetcher();
+    const createdAt = nowMs();
+    const entry: CacheEntry<T> = {
+      value,
+      createdAt,
+      expiresAt: createdAt + ttlMs,
+      meta: options.meta,
+    };
 
-  return {
-    value,
-    cache: buildCacheMeta(key, entry, false, ttlMs, "ttl"),
-  };
+    store.set(key, entry);
+    return entry;
+  })();
+
+  if (!force) inflightStore.set(key, fetchPromise as Promise<CacheEntry>);
+
+  try {
+    const entry = await fetchPromise;
+    return {
+      value: entry.value,
+      cache: buildCacheMeta(key, entry, false, ttlMs, "ttl"),
+    };
+  } finally {
+    if (!force && inflightStore.get(key) === fetchPromise) {
+      inflightStore.delete(key);
+    }
+  }
 }
 
 export function nextScheduledRefreshMs(
@@ -226,22 +262,48 @@ export async function getOrFetchScheduledDailyCached<T>(options: ScheduledDailyO
     };
   }
 
-  const value = await options.fetcher();
-  const createdAt = nowMs();
-  const expiresAt = nextScheduledRefreshMs(refreshHours, timezoneOffsetMinutes, createdAt);
-  const entry: CacheEntry<T> = {
-    value,
-    createdAt,
-    expiresAt,
-    meta: options.meta,
-  };
+  if (!force) {
+    const inflight = inflightStore.get(key) as Promise<CacheEntry<T>> | undefined;
+    if (inflight) {
+      const entry = await inflight;
+      return {
+        value: entry.value,
+        cache: {
+          ...buildCacheMeta(key, entry, false, Math.max(0, entry.expiresAt - entry.createdAt), "scheduled_daily"),
+          coalesced: true,
+        },
+      };
+    }
+  }
 
-  store.set(key, entry);
+  const fetchPromise = (async () => {
+    const value = await options.fetcher();
+    const createdAt = nowMs();
+    const expiresAt = nextScheduledRefreshMs(refreshHours, timezoneOffsetMinutes, createdAt);
+    const entry: CacheEntry<T> = {
+      value,
+      createdAt,
+      expiresAt,
+      meta: options.meta,
+    };
 
-  return {
-    value,
-    cache: buildCacheMeta(key, entry, false, Math.max(0, expiresAt - createdAt), "scheduled_daily"),
-  };
+    store.set(key, entry);
+    return entry;
+  })();
+
+  if (!force) inflightStore.set(key, fetchPromise as Promise<CacheEntry>);
+
+  try {
+    const entry = await fetchPromise;
+    return {
+      value: entry.value,
+      cache: buildCacheMeta(key, entry, false, Math.max(0, entry.expiresAt - entry.createdAt), "scheduled_daily"),
+    };
+  } finally {
+    if (!force && inflightStore.get(key) === fetchPromise) {
+      inflightStore.delete(key);
+    }
+  }
 }
 
 export function normalizeCacheKeyPart(value: unknown) {
