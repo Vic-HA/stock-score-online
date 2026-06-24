@@ -3,8 +3,8 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-24T12:26:14.341Z",
-  "finishedAt": "2026-06-24T12:28:57.853Z",
+  "startedAt": "2026-06-24T16:30:12.774Z",
+  "finishedAt": "2026-06-24T16:32:55.681Z",
   "requestedSymbols": [
     "0050",
     "1101",
@@ -407,9 +407,7 @@
       "rowCount": 174,
       "latestDate": "2026-06-24",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-24"
-      ]
+      "warnings": []
     },
     {
       "symbol": "3008",
@@ -529,7 +527,7 @@
     "symbols": 50,
     "sourceLatestDate": "2026-06-24"
   },
-  "updatedAt": "2026-06-24T12:28:57.853Z",
+  "updatedAt": "2026-06-24T16:32:55.681Z",
   "sourceLatestDate": "2026-06-24",
   "totalSymbols": 50,
   "requestedCount": 50,
