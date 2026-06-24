@@ -677,9 +677,15 @@ function isPreOpenValidationStatus(status) {
   return String(status || "").includes("盤前");
 }
 
+function isTwseAfterHoursValidationStatus(status) {
+  const label = String(status || "");
+  return label.includes("盤後最後行情") || label.includes("非盤中");
+}
+
 function validationStatusClassForDisplay(status) {
   const label = String(status || "");
   if (isPreOpenValidationStatus(label)) return "bg-sky-100 text-sky-800";
+  if (isTwseAfterHoursValidationStatus(label)) return "bg-slate-100 text-slate-700";
   if (label.includes("日期")) return "bg-blue-100 text-blue-800";
   if (label.includes("參考")) return "bg-indigo-100 text-indigo-800";
   if (label.includes("已補") || label.includes("接入")) return "bg-sky-100 text-sky-800";
@@ -688,17 +694,17 @@ function validationStatusClassForDisplay(status) {
 }
 
 function validationDiffTextForDisplay(row) {
-  if (isPreOpenValidationStatus(row?.status)) return "-";
+  if (isPreOpenValidationStatus(row?.status) || isTwseAfterHoursValidationStatus(row?.status)) return "-";
   return validationDiffText(row);
 }
 
 function validationToleranceTextForDisplay(row) {
-  if (isPreOpenValidationStatus(row?.status)) return "-";
+  if (isPreOpenValidationStatus(row?.status) || isTwseAfterHoursValidationStatus(row?.status)) return "-";
   return validationToleranceText(row);
 }
 
 function compactValidationNoteForDisplay(row) {
-  if (isPreOpenValidationStatus(row?.status) && row?.note) return row.note;
+  if ((isPreOpenValidationStatus(row?.status) || isTwseAfterHoursValidationStatus(row?.status)) && row?.note) return row.note;
   return compactValidationNote(row);
 }
 
@@ -706,7 +712,7 @@ function hasPreOpenValidationRow(rows = []) {
   return rows.some((row) => isPreOpenValidationStatus(row?.status));
 }
 
-const VALIDATION_DISPLAY_NEUTRAL_KEYWORDS = ["通過", "日期", "參考", "已補", "接入", "不比對"];
+const VALIDATION_DISPLAY_NEUTRAL_KEYWORDS = ["通過", "日期", "參考", "已補", "接入", "不比對", "盤後", "非盤中"];
 const VALIDATION_DISPLAY_HARD_KEYWORDS = ["資料異常", "差異偏大", "需查", "需檢查"];
 const VALIDATION_CRITICAL_MISSING_LABEL_KEYWORDS = [
   "現價",
@@ -856,22 +862,28 @@ function applyTwsePreOpenValidationStatus(rows = [], isPreOpen = false, tradetim
   });
 }
 
+function applyTwseAfterHoursValidationStatus(rows = [], isAfterHours = false, tradetime = "", ageSec = null) {
+  if (!isAfterHours) return rows;
+  const timeText = String(tradetime || "").trim();
+  const ageText = Number.isFinite(Number(ageSec)) ? ` / age ${Number(ageSec)}s` : "";
+  const note = `TWSE MIS 時間${timeText ? ` ${timeText}` : ""}${ageText} 已超過盤中即時窗口；此列作為盤後最後行情 / 非盤中參考，不判定為資料異常。`;
 
-function applyTwseSnapshotMissingValidationStatus(rows, snapshotMissing) {
-  if (!snapshotMissing) return rows;
-  const snapshotDependent = /10日均量|20日均量 avgVolume20|5MA|20MA|60MA|RSI14|20日高點|20日低點|20日報酬|60日報酬|技術預熱|MACD|KD |ATR/;
   return rows.map((row) => {
-    if (!snapshotDependent.test(String(row?.label || ""))) return row;
-    return {
-      ...row,
-      finmindValue: null,
-      diffPct: 0,
-      status: "Snapshot 未收錄",
-      currentSource: "TWSE Snapshot（未收錄）",
-      compareSource: row?.compareSource || "FinMind 驗證 / 備援",
-      toleranceLabel: "需加入 snapshot universe",
-      note: `${row?.note || ""} TWSE history snapshot 未收錄此標的，技術列不把 0 當有效值，也不進一般通過/失敗比對。`,
-    };
+    if (!row) return row;
+    const label = String(row.label || "");
+    if (["現價 price", "成交量 volume", "TWSE MIS 盤中價量"].includes(label)) {
+      return {
+        ...row,
+        status: "盤後最後行情",
+        diffPct: 0,
+        tolerancePct: 0,
+        toleranceLabel: "非盤中",
+        note,
+        currentSource: row.currentSource ? String(row.currentSource).replace("TWSE MIS", "TWSE MIS（盤後最後行情）") : "TWSE MIS（盤後最後行情）",
+        compareSource: label === "TWSE MIS 盤中價量" ? "不比對" : row.compareSource,
+      };
+    }
+    return row;
   });
 }
 
@@ -1029,7 +1041,6 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const twseHistoryReturn20d = pickCompare(validationMap, symbol, "twse_history", "return20d");
   const twseHistoryReturn60d = pickCompare(validationMap, symbol, "twse_history", "return60d");
   const twseHistoryPriceRowCount = pickCompare(validationMap, symbol, "twse_history", "priceRowCount");
-  const twseHistorySnapshotMissing = finiteOrNull(twseHistoryPriceRowCount.value) !== null && Number(twseHistoryPriceRowCount.value) <= 0;
   const finMacd = pickCompare(validationMap, symbol, "finmind", "macd");
   const finMacdSignal = pickCompare(validationMap, symbol, "finmind", "macdSignal");
   const finMacdHist = pickCompare(validationMap, symbol, "finmind", "macdHist");
@@ -1139,6 +1150,8 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   const twseMisMainPriceSource = twseMisPrice.value !== null ? twseMisPrice.source : twseMisPriceFallback.value !== null ? twseMisPriceFallback.source : twseMisQuoteMidPrice.value !== null ? `${twseMisQuoteMidPrice.source} 五檔中間價` : noCompare;
   const twseMisTimeLabel = twseMisTradetime.value ? `（${twseMisTradetime.value}${twseMisQuoteAgeSec.value !== null ? ` / age ${twseMisQuoteAgeSec.value}s` : ""}）` : "";
   const isTwseMisPreOpen = isTwsePreOpenByTradeTime(twseMisTradetime.value);
+  const twseMisAgeSecNumber = Number(twseMisQuoteAgeSec.value);
+  const isTwseMisAfterHours = !isTwseMisPreOpen && Number.isFinite(twseMisAgeSecNumber) && twseMisAgeSecNumber >= 30 * 60;
 
   const finmindDataTime = main.finmindDataTime || {};
   const finmindProfileDataTime = main.finmindProfileDataTime || {};
@@ -1158,7 +1171,7 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
 
   const rows = [
     compareSourceValue("現價 price", twseMisMainPriceValue, googlePrice.value, 0.5, `TWSE MIS 為盤中主值；GoogleFinance 僅作外部即時參考，不再判定通過 / 需檢查。${twseMisDisplayPriceType.value === "mid" ? "目前 MIS 使用五檔中間價作參考價，非正式成交價。" : ""}`, twseMisMainPriceValue !== null ? `${twseMisMainPriceSource}${twseMisTimeLabel}` : getFieldSource(main, "price"), googlePrice.value !== null ? `${googlePrice.source}（參考）` : noCompare, googlePrice.value !== null && twseMisMainPriceValue !== null ? { statusOverrideAfterCompare: "即時參考", toleranceLabel: "參考" } : { statusOverride: twseMisMainPriceValue !== null ? "已補值" : undefined }),
-    compareSourceValue("昨收 prevClose", twsePrevClose.value, googlePrevClose.value, 0.2, "昨收主值收斂到 TWSE 官方；GoogleFinance 保留為驗證值。若差異出現，優先檢查 Google CSV 是否仍為舊快照或昨收口徑未更新。", twsePrevClose.value !== null ? `${twsePrevClose.source}${twseOfficialDate ? `（${normalizeValidationDate(twseOfficialDate)}）` : ""}` : noCompare, googlePrevClose.value !== null ? googlePrevClose.source : noCompare, googlePrevClose.value !== null ? {} : { statusOverride: twsePrevClose.value !== null ? "已補值" : undefined, toleranceLabel: twsePrevClose.value !== null ? "不比對" : undefined }),
+    compareSourceValue("昨收 prevClose", twsePrevClose.value, googlePrevClose.value, 0.2, "昨收主值收斂到 TWSE 官方；GoogleFinance 保留為驗證值。若差異出現，優先檢查 Google CSV 是否仍為舊快照或昨收口徑未更新。", twsePrevClose.value !== null ? `${twsePrevClose.source}${twseOfficialDate ? `（${normalizeValidationDate(twseOfficialDate)}）` : ""}` : noCompare, googlePrevClose.value !== null ? googlePrevClose.source : noCompare),
     compareSourceValue("成交量 volume", twseMisVolume.value, googleVolume.value, 5, `盤中成交量主來源改用 TWSE MIS；GoogleFinance 保留輔助參考，不影響總覽狀態。${twseMisTradetime.value ? `MIS 時間 ${twseMisTradetime.value}` : ""}`, twseMisVolume.value !== null ? `${twseMisVolume.source}${twseMisTimeLabel}` : getFieldSource(main, "volume"), googleVolume.value !== null ? googleVolume.source : noCompare, googleVolume.value !== null && twseMisVolume.value !== null ? { statusOverrideAfterCompare: "即時參考", toleranceLabel: "參考" } : { statusOverride: twseMisVolume.value !== null ? "已補值" : undefined }),
     compareSourceValue("TWSE MIS 盤中價量", twseMisVolume.value, null, 0, `TWSE MIS 已作為盤中價量主來源候選；僅改價量來源，不改短線分數公式。${twseMisMainPriceValue !== null ? ` MIS 價 ${twseMisMainPriceValue}` : ""}${twseMisTradetime.value ? `，MIS 時間 ${twseMisTradetime.value}` : ""}`, twseMisVolume.value !== null ? `${twseMisVolume.source}${twseMisTimeLabel}` : noCompare, getSourceName("none"), { statusOverride: "已補值" }),
     compareSourceValue("官方收盤 close", twseClose.value, finDailyClose.value, 0.2, dailyCloseCheck.dateNote || "盤後收盤主值收斂到 TWSE OpenAPI；FinMind 日 K 保留為技術序列與驗證值。日期一致才判通過/失敗，不覆蓋盤中 TWSE MIS 主行情。", twseClose.value !== null ? `${twseClose.source}${twseOfficialDate ? `（${normalizeValidationDate(twseOfficialDate)}）` : ""}` : noCompare, finDailyClose.value !== null ? `${finDailyClose.source}${finUpdatedAt.value ? `（${normalizeValidationDate(finUpdatedAt.value)}）` : ""}` : getFieldSource(main, "dailyClose"), dailyCloseCheck.noCompare ? { noCompare: true } : {}),
@@ -1236,10 +1249,10 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
     (!isEtf ? compareSourceValue("負債比 debtRatio", main.debtRatio, finDebtRatio.value, 0.1, "FinMind 資產負債資料。ETF 可能無此欄位。", getFieldSource(main, "debtRatio"), finDebtRatio.value !== null ? finDebtRatio.source : noCompare, { statusOverride: "已補值" }) : null),
     (!isEtf ? compareSourceValue("財報季度數 financialQuarterCount", main.financialQuarterCount, finFinancialQuarterCount.value, 0, "確認近四季 EPS / TTM / ROE 是否有足夠財報序列；不作交叉驗證。", getFieldSource(main, "financialQuarterCount"), finFinancialQuarterCount.value !== null ? finFinancialQuarterCount.source : noCompare, { statusOverride: "接入確認", toleranceLabel: "需足夠" }) : null),
 
-    compareSourceValue("Nasdaq 一日變化", mainNasdaqPct, googleNasdaqPct, 0.05, "FinMind Market 為市場風險主資料；GoogleFinance 僅作 optional 參考，不判定主資料錯誤。", withSourceDate(getFieldSource(main, "nasdaqReturn1d"), marketUsDate), googleNasdaqPct !== null ? withSourceDate(googleNasdaq.source, googleMarketDate, "參考") : noCompare, googleNasdaqPct !== null ? { compareMode: "abs", toleranceLabel: "參考", statusOverrideAfterCompare: "市場參考" } : { compareMode: "abs", toleranceLabel: "參考", statusOverride: mainNasdaqPct !== null ? "市場參考" : undefined } ),
-    compareSourceValue("SOX 一日變化", mainSoxPct, googleSoxPct, 0.05, "FinMind Market 為市場風險主資料；GoogleFinance 僅作 optional 參考，不判定主資料錯誤。", withSourceDate(getFieldSource(main, "soxReturn1d"), marketUsDate), googleSoxPct !== null ? withSourceDate(googleSox.source, googleMarketDate, "參考") : noCompare, googleSoxPct !== null ? { compareMode: "abs", toleranceLabel: "參考", statusOverrideAfterCompare: "市場參考" } : { compareMode: "abs", toleranceLabel: "參考", statusOverride: mainSoxPct !== null ? "市場參考" : undefined } ),
+    compareSourceValue("Nasdaq 一日變化", mainNasdaqPct, googleNasdaqPct, 0.05, "FinMind Market 為市場風險主資料；GoogleFinance 僅作 optional 參考，不判定主資料錯誤。", withSourceDate(getFieldSource(main, "nasdaqReturn1d"), marketUsDate), googleNasdaqPct !== null ? withSourceDate(googleNasdaq.source, googleMarketDate, "參考") : noCompare, googleNasdaqPct !== null ? { compareMode: "abs", toleranceLabel: "參考", statusOverrideAfterCompare: "市場參考" } : { compareMode: "abs", toleranceLabel: "參考" } ),
+    compareSourceValue("SOX 一日變化", mainSoxPct, googleSoxPct, 0.05, "FinMind Market 為市場風險主資料；GoogleFinance 僅作 optional 參考，不判定主資料錯誤。", withSourceDate(getFieldSource(main, "soxReturn1d"), marketUsDate), googleSoxPct !== null ? withSourceDate(googleSox.source, googleMarketDate, "參考") : noCompare, googleSoxPct !== null ? { compareMode: "abs", toleranceLabel: "參考", statusOverrideAfterCompare: "市場參考" } : { compareMode: "abs", toleranceLabel: "參考" } ),
     compareSourceValue("台指期盤後 taifexAfterHoursReturn", mainTaifexPct, googleTaifexPct, 0.1, "主資料用 FinMind Derivatives；GoogleFinance 沒有穩定台指期盤後欄位時不比對，只列參考。若 Sheet 有填，會先統一為百分點格式。", withSourceDate(getFieldSource(main, "taifexAfterHoursReturn"), derivativesDate), googleTaifexPct !== null ? withSourceDate(googleTaifex.source, googleMarketDate, "參考，不比對") : getSourceName("none"), { compareMode: "abs", toleranceLabel: "±0.10點", noCompare: true }),
-    compareSourceValue("VIX 一日變化", mainVixPctRaw, googleVixPct, 0.1, "FinMind Market 為 VIX 風險主資料；GoogleFinance 僅作 optional 參考，並保留小數點位移防呆。", withSourceDate(getFieldSource(main, "vixChange1d"), marketUsDate), googleVixPct !== null ? withSourceDate(googleVix.source, googleMarketDate, "參考") : getSourceName("none"), googleVixPct !== null ? { compareMode: "abs", toleranceLabel: "參考", statusOverrideAfterCompare: "市場參考" } : { compareMode: "abs", toleranceLabel: "參考", statusOverride: mainVixPctRaw !== null ? "市場參考" : undefined } ),
+    compareSourceValue("VIX 一日變化", mainVixPctRaw, googleVixPct, 0.1, "FinMind Market 為 VIX 風險主資料；GoogleFinance 僅作 optional 參考，並保留小數點位移防呆。", withSourceDate(getFieldSource(main, "vixChange1d"), marketUsDate), googleVixPct !== null ? withSourceDate(googleVix.source, googleMarketDate, "參考") : getSourceName("none"), googleVixPct !== null ? { compareMode: "abs", toleranceLabel: "參考", statusOverrideAfterCompare: "市場參考" } : { compareMode: "abs", toleranceLabel: "參考" } ),
   ];
 
   const validationDateLabelContext = {
@@ -1258,8 +1271,8 @@ function getSourceValidationRows(symbol, stock, validationMap = {}) {
   };
 
   const normalizedRows = cleanupFinMindOnlyValidationRows(rows.filter(Boolean)).map((row) => attachValidationDateLabels(row, validationDateLabelContext));
-  const snapshotAwareRows = applyTwseSnapshotMissingValidationStatus(normalizedRows, twseHistorySnapshotMissing);
-  return applyTwsePreOpenValidationStatus(snapshotAwareRows, isTwseMisPreOpen, twseMisTradetime.value);
+  const preOpenRows = applyTwsePreOpenValidationStatus(normalizedRows, isTwseMisPreOpen, twseMisTradetime.value);
+  return applyTwseAfterHoursValidationStatus(preOpenRows, isTwseMisAfterHours, twseMisTradetime.value, twseMisQuoteAgeSec.value);
 }
 
 
@@ -3395,7 +3408,9 @@ export default function StockShortV1App() {
 
 
   useEffect(() => {
-    if (!stocksHydrated || !apiConfig.twseProxyUrl) return undefined;
+    const hasTwseOfficialRoute = Boolean(apiConfig.twseProxyUrl);
+    const hasTwseSnapshotRoute = Boolean(apiConfig.twseHistoryProxyUrl || DEFAULT_TWSE_HISTORY_PROXY_URL);
+    if (!stocksHydrated || (!hasTwseOfficialRoute && !hasTwseSnapshotRoute)) return undefined;
 
     const currentSlot = getScheduledOfficialCacheSlot();
     if (currentSlot && !scheduledOfficialCacheSlotRef.current) {
@@ -3416,7 +3431,15 @@ export default function StockShortV1App() {
       scheduledOfficialCacheSlotRef.current = nextSlot;
       running = true;
       try {
-        await loadTwseOpenApi(symbols, { silent: true, skipCooldown: true });
+        const tasks = [];
+        if (hasTwseOfficialRoute) tasks.push(loadTwseOpenApi(symbols, { silent: true, skipCooldown: true }));
+        if (hasTwseSnapshotRoute) tasks.push(loadTwseHistorySnapshot(symbols, { silent: true, skipCooldown: true }));
+        const results = await Promise.allSettled(tasks);
+        const okCount = results.filter((result) => result.status === "fulfilled" && result.value?.ok !== false).length;
+        if (okCount > 0) {
+          const clock = new Date().toLocaleTimeString("zh-TW", { hour12: false });
+          setApiMessage(`固定時段盤後校正 ${clock}｜TWSE / Snapshot 已檢查`);
+        }
       } finally {
         running = false;
       }
@@ -3431,6 +3454,7 @@ export default function StockShortV1App() {
   }, [
     stocksHydrated,
     apiConfig.twseProxyUrl,
+    apiConfig.twseHistoryProxyUrl,
     stocks.map((stock) => stock.symbol).join(","),
   ]);
 

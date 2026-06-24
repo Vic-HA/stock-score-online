@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // scripts/phase-d-refresh-history-cache.mjs
-// BUILD: PHASE_D_HISTORY_CACHE_V0_4
+// BUILD: PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS
 //
 // Purpose:
 // - Maintain per-symbol durable TWSE history cache files for stocks / ETFs.
@@ -10,7 +10,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const BUILD = "PHASE_D_HISTORY_CACHE_V0_4";
+const BUILD = "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS";
 const ROOT = process.cwd();
 const DEFAULT_SNAPSHOT_PATH = "data/twse-history-snapshot.json";
 const DEFAULT_CACHE_DIR = "data/history-cache";
@@ -692,6 +692,33 @@ function normalizeMaybeDate(value) {
   return String(value).slice(0, 10);
 }
 
+function buildStatusSummary(status, compatibilitySnapshot, config) {
+  const results = Array.isArray(status?.results) ? status.results : [];
+  const latestDates = results
+    .map((result) => normalizeMaybeDate(result?.latestDate))
+    .filter(Boolean)
+    .sort();
+  const sourceLatestDate = normalizeMaybeDate(compatibilitySnapshot?.sourceLatestDate) || latestDates[latestDates.length - 1] || null;
+  const snapshotSymbols = compatibilitySnapshot?.symbols && typeof compatibilitySnapshot.symbols === "object"
+    ? Object.keys(compatibilitySnapshot.symbols).length
+    : null;
+
+  return {
+    updatedAt: status?.finishedAt || status?.startedAt || null,
+    sourceLatestDate,
+    totalSymbols: results.length,
+    requestedCount: Array.isArray(status?.requestedSymbols) ? status.requestedSymbols.length : 0,
+    passCount: Array.isArray(status?.passSymbols) ? status.passSymbols.length : 0,
+    partialCount: Array.isArray(status?.partialSymbols) ? status.partialSymbols.length : 0,
+    failCount: Array.isArray(status?.failedSymbols) ? status.failedSymbols.length : 0,
+    prunedCount: Array.isArray(status?.prunedSymbols) ? status.prunedSymbols.length : 0,
+    snapshotPath: config?.snapshotPath || DEFAULT_SNAPSHOT_PATH,
+    snapshotSymbols,
+    latestResultDate: latestDates[latestDates.length - 1] || null,
+  };
+}
+
+
 async function selectAutoSymbols(config, symbols, snapshot, registry, now) {
   // Explicit --symbols / --symbolsFile is always respected. This makes local smoke tests fast.
   if (config.explicitSymbols) return symbols;
@@ -861,6 +888,8 @@ async function main() {
       }
     : null;
 
+  Object.assign(status, buildStatusSummary(status, compatibilitySnapshot, config));
+
   await writeJson(resolveRepoPath(config.statusPath), status, config.dryRun);
 
   console.log(`[${BUILD}] ${status.ok ? "PASS" : "PARTIAL_OR_FAILED"}`);
@@ -877,13 +906,25 @@ main().catch(async (error) => {
   console.error(message);
   try {
     const config = parseArgs();
+    const failedAt = nowIso();
     await writeJson(resolveRepoPath(config.statusPath), {
       schemaVersion: 1,
       build: BUILD,
       ok: false,
       mode: config.mode,
       startedAt: null,
-      finishedAt: nowIso(),
+      finishedAt: failedAt,
+      updatedAt: failedAt,
+      sourceLatestDate: null,
+      totalSymbols: 0,
+      requestedCount: 0,
+      passCount: 0,
+      partialCount: 0,
+      failCount: 1,
+      prunedCount: 0,
+      snapshotPath: config.snapshotPath || DEFAULT_SNAPSHOT_PATH,
+      snapshotSymbols: null,
+      latestResultDate: null,
       error: message,
     }, config.dryRun);
   } catch {

@@ -18,7 +18,6 @@ on:
         required: false
         default: true
         type: boolean
-  # Enable schedule only after manual workflow_dispatch passes on GitHub.
   # GitHub schedule uses UTC and only runs from the repository default branch.
   # Taiwan time examples:
   #   15:40 Asia/Taipei = 07:40 UTC
@@ -30,7 +29,6 @@ on:
     - cron: "10 14 * * 1-5"
 permissions:
   contents: write
-  issues: write
 
 concurrency:
   group: phase-d-history-cache-refresh-${{ github.ref }}
@@ -66,38 +64,11 @@ jobs:
           echo $! > /tmp/phase-d-next.pid
           npx --yes wait-on http://127.0.0.1:3000/ --timeout 90000
 
-      - name: Select pending TWSE snapshot symbols
-        id: pending
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p .tmp
-          MAX_SYMBOLS="${{ inputs.max_symbols || '50' }}"
-          MANUAL_SYMBOLS="${{ inputs.symbols || '' }}"
-
-          if [ -n "$MANUAL_SYMBOLS" ]; then
-            echo "$MANUAL_SYMBOLS" > .tmp/phase-d-selected-symbols.txt
-            echo "queue_mode=manual" >> "$GITHUB_OUTPUT"
-          else
-            if node scripts/phase-d-pending-symbols-queue.mjs --mode=select --limit="$MAX_SYMBOLS" --out=.tmp/phase-d-selected-symbols.txt; then
-              echo "queue_mode=pending" >> "$GITHUB_OUTPUT"
-            else
-              echo "Pending queue unavailable; falling back to auto refresh."
-              : > .tmp/phase-d-selected-symbols.txt
-              echo "queue_mode=auto" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-          SELECTED_SYMBOLS="$(cat .tmp/phase-d-selected-symbols.txt | tr -d '[:space:]')"
-          echo "symbols=$SELECTED_SYMBOLS" >> "$GITHUB_OUTPUT"
-          echo "Selected symbols: ${SELECTED_SYMBOLS:-<auto>}"
-
       - name: Refresh Phase D history cache
         shell: bash
         run: |
           MAX_SYMBOLS="${{ inputs.max_symbols || '50' }}"
-          SYMBOLS="${{ steps.pending.outputs.symbols }}"
+          SYMBOLS="${{ inputs.symbols || '' }}"
           FORCE_FLAG=""
           SYMBOLS_FLAG=""
           MODE="auto"
@@ -116,17 +87,10 @@ jobs:
             --autoMaxSymbols="$MAX_SYMBOLS" \
             --baseUrl=http://127.0.0.1:3000
 
-      - name: Complete pending TWSE snapshot symbols
-        if: steps.pending.outputs.queue_mode == 'pending' && steps.pending.outputs.symbols != ''
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/phase-d-pending-symbols-queue.mjs --mode=complete --statusPath=data/history-cache/status.json
-
       - name: Verify Phase D history cache
         shell: bash
         run: |
-          SYMBOLS="${{ steps.pending.outputs.symbols }}"
+          SYMBOLS="${{ inputs.symbols || '' }}"
           SYMBOLS_FLAG=""
           if [ -n "$SYMBOLS" ]; then
             SYMBOLS_FLAG="--symbols=$SYMBOLS"
