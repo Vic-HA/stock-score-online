@@ -1,7 +1,7 @@
 {
   "build": "TWSE_HISTORY_SNAPSHOT_V03_PHASE_D_PER_SYMBOL_COMPAT",
-  "builder": "PHASE_D_HISTORY_CACHE_V0_4",
-  "updatedAt": "2026-06-23T12:46:27.945Z",
+  "builder": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
+  "updatedAt": "2026-06-24T00:33:15.166Z",
   "sourceLatestDate": "2026-06-23",
   "retentionRows": 220,
   "symbols": {
@@ -69552,7 +69552,7 @@
     "primarySource": "TWSE STOCK_DAY"
   },
   "diagnostics": {
-    "build": "PHASE_D_HISTORY_CACHE_V0_4",
+    "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
     "requestedSymbols": [
       "2330",
       "0050",
@@ -70198,7 +70198,7 @@
     "snapshotSymbolsPreserved": 50,
     "snapshotSymbolsWritten": 50,
     "phaseDStatus": {
-      "lastRunAt": "2026-06-23T12:43:40.118Z",
+      "lastRunAt": "2026-06-24T00:30:15.005Z",
       "passSymbols": [
         "0050",
         "1101",

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "build": "PHASE_D_HISTORY_CACHE_V0_4",
+  "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-23T12:43:40.118Z",
-  "finishedAt": "2026-06-23T12:46:27.960Z",
+  "startedAt": "2026-06-24T00:30:15.005Z",
+  "finishedAt": "2026-06-24T00:33:15.184Z",
   "requestedSymbols": [
     "0050",
     "1101",
@@ -303,7 +303,9 @@
       "rowCount": 173,
       "latestDate": "2026-06-23",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-23"
+      ]
     },
     {
       "symbol": "2603",
@@ -495,9 +497,7 @@
       "rowCount": 173,
       "latestDate": "2026-06-23",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-23"
-      ]
+      "warnings": []
     },
     {
       "symbol": "8046",
@@ -528,5 +528,16 @@
     "path": "data/twse-history-snapshot.json",
     "symbols": 50,
     "sourceLatestDate": "2026-06-23"
-  }
+  },
+  "updatedAt": "2026-06-24T00:33:15.184Z",
+  "sourceLatestDate": "2026-06-23",
+  "totalSymbols": 50,
+  "requestedCount": 50,
+  "passCount": 50,
+  "partialCount": 0,
+  "failCount": 0,
+  "prunedCount": 0,
+  "snapshotPath": "data/twse-history-snapshot.json",
+  "snapshotSymbols": 50,
+  "latestResultDate": "2026-06-23"
 }

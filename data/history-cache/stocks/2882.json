@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "build": "PHASE_D_HISTORY_CACHE_V0_4",
+  "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "symbol": "2882",
   "type": "stock",
   "active": true,
   "createdAt": "2026-06-16T02:56:45.770Z",
-  "updatedAt": "2026-06-23T12:43:40.178Z",
+  "updatedAt": "2026-06-24T00:30:15.066Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -1418,9 +1418,9 @@
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-06-23T12:43:40.178Z",
-    "lastRefreshAt": "2026-06-23T12:43:40.178Z",
-    "lastGoodAt": "2026-06-23T12:43:40.178Z",
+    "lastRequestedAt": "2026-06-24T00:30:15.066Z",
+    "lastRefreshAt": "2026-06-24T00:30:15.066Z",
+    "lastGoodAt": "2026-06-24T00:30:15.066Z",
     "lastError": null
   }
 }
