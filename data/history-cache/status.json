@@ -1,66 +1,541 @@
 {
   "schemaVersion": 1,
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
-  "mode": "refresh",
+  "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-25T05:41:34.235Z",
-  "finishedAt": "2026-06-25T05:41:44.287Z",
+  "startedAt": "2026-06-25T10:26:56.896Z",
+  "finishedAt": "2026-06-25T10:29:50.247Z",
   "requestedSymbols": [
-    "00981A",
-    "2406",
-    "6189"
+    "0050",
+    "1101",
+    "1102",
+    "1216",
+    "1301",
+    "1303",
+    "1326",
+    "2002",
+    "2207",
+    "2303",
+    "2308",
+    "2317",
+    "2327",
+    "2330",
+    "2345",
+    "2356",
+    "2357",
+    "2379",
+    "2382",
+    "2395",
+    "2408",
+    "2412",
+    "2454",
+    "2474",
+    "2603",
+    "2609",
+    "2615",
+    "2618",
+    "2801",
+    "2881",
+    "2882",
+    "2884",
+    "2885",
+    "2886",
+    "2891",
+    "2892",
+    "2912",
+    "3008",
+    "3034",
+    "3045",
+    "3711",
+    "4904",
+    "5871",
+    "5876",
+    "5880",
+    "6415",
+    "6505",
+    "6669",
+    "8046",
+    "9910"
   ],
   "passSymbols": [
-    "00981A",
-    "2406",
-    "6189"
+    "0050",
+    "1101",
+    "1102",
+    "1216",
+    "1301",
+    "1303",
+    "1326",
+    "2002",
+    "2207",
+    "2303",
+    "2308",
+    "2317",
+    "2327",
+    "2330",
+    "2345",
+    "2356",
+    "2357",
+    "2379",
+    "2382",
+    "2395",
+    "2408",
+    "2412",
+    "2454",
+    "2474",
+    "2603",
+    "2609",
+    "2615",
+    "2618",
+    "2801",
+    "2881",
+    "2882",
+    "2884",
+    "2885",
+    "2886",
+    "2891",
+    "2892",
+    "2912",
+    "3008",
+    "3034",
+    "3045",
+    "3711",
+    "4904",
+    "5871",
+    "5876",
+    "5880",
+    "6415",
+    "6505",
+    "6669",
+    "8046",
+    "9910"
   ],
   "partialSymbols": [],
   "failedSymbols": [],
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "00981A",
+      "symbol": "0050",
       "state": "pass",
-      "rowCount": 154,
-      "latestDate": "2026-06-24",
+      "rowCount": 155,
+      "latestDate": "2026-06-25",
       "source": "twse_route",
       "warnings": []
     },
     {
-      "symbol": "2406",
+      "symbol": "1101",
       "state": "pass",
-      "rowCount": 154,
-      "latestDate": "2026-06-24",
+      "rowCount": 196,
+      "latestDate": "2026-06-25",
       "source": "twse_route",
       "warnings": []
     },
     {
-      "symbol": "6189",
+      "symbol": "1102",
       "state": "pass",
-      "rowCount": 154,
-      "latestDate": "2026-06-24",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "1216",
+      "state": "pass",
+      "rowCount": 155,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "1301",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "1303",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "1326",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2002",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2207",
+      "state": "pass",
+      "rowCount": 195,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2303",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2308",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2317",
+      "state": "pass",
+      "rowCount": 191,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2327",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2330",
+      "state": "pass",
+      "rowCount": 155,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2345",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2356",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2357",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2379",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2382",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2395",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2408",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2412",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2454",
+      "state": "pass",
+      "rowCount": 155,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2474",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2603",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2609",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2615",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2618",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2801",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2881",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2882",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2884",
+      "state": "pass",
+      "rowCount": 174,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2885",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2886",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2891",
+      "state": "pass",
+      "rowCount": 196,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2892",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "2912",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "3008",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "3034",
+      "state": "pass",
+      "rowCount": 191,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "3045",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "3711",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "4904",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "5871",
+      "state": "pass",
+      "rowCount": 191,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "5876",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "5880",
+      "state": "pass",
+      "rowCount": 176,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6415",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6505",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6669",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "8046",
+      "state": "pass",
+      "rowCount": 191,
+      "latestDate": "2026-06-25",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "9910",
+      "state": "pass",
+      "rowCount": 175,
+      "latestDate": "2026-06-25",
       "source": "twse_route",
       "warnings": []
     }
   ],
   "warnings": [],
   "dryRun": false,
-  "auto": null,
+  "auto": {
+    "staleHours": 12,
+    "maxSymbols": 50,
+    "failOnPartial": false,
+    "explicitSymbols": false
+  },
   "compatibilitySnapshot": {
     "path": "data/twse-history-snapshot.json",
     "symbols": 53,
-    "sourceLatestDate": "2026-06-24"
+    "sourceLatestDate": "2026-06-25"
   },
-  "updatedAt": "2026-06-25T05:41:44.287Z",
-  "sourceLatestDate": "2026-06-24",
-  "totalSymbols": 3,
-  "requestedCount": 3,
-  "passCount": 3,
+  "updatedAt": "2026-06-25T10:29:50.247Z",
+  "sourceLatestDate": "2026-06-25",
+  "totalSymbols": 50,
+  "requestedCount": 50,
+  "passCount": 50,
   "partialCount": 0,
   "failCount": 0,
   "prunedCount": 0,
   "snapshotPath": "data/twse-history-snapshot.json",
   "snapshotSymbols": 53,
-  "latestResultDate": "2026-06-24"
+  "latestResultDate": "2026-06-25"
 }
