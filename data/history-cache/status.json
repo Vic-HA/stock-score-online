@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-26T10:37:54.244Z",
-  "finishedAt": "2026-06-26T10:46:40.029Z",
+  "startedAt": "2026-06-26T12:22:41.623Z",
+  "finishedAt": "2026-06-26T12:25:27.174Z",
   "requestedSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -114,15 +114,7 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6189",
-      "state": "pass",
-      "rowCount": 156,
-      "latestDate": "2026-06-26",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "6415",
+      "symbol": "6669",
       "state": "pass",
       "rowCount": 176,
       "latestDate": "2026-06-26",
@@ -130,7 +122,15 @@
       "warnings": []
     },
     {
-      "symbol": "6505",
+      "symbol": "8046",
+      "state": "pass",
+      "rowCount": 192,
+      "latestDate": "2026-06-26",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "9910",
       "state": "pass",
       "rowCount": 176,
       "latestDate": "2026-06-26",
@@ -180,7 +180,7 @@
     {
       "symbol": "1301",
       "state": "pass",
-      "rowCount": 176,
+      "rowCount": 197,
       "latestDate": "2026-06-26",
       "source": "twse_route",
       "warnings": []
@@ -348,12 +348,10 @@
     {
       "symbol": "2603",
       "state": "pass",
-      "rowCount": 175,
-      "latestDate": "2026-06-25",
+      "rowCount": 176,
+      "latestDate": "2026-06-26",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-25"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2609",
@@ -414,12 +412,10 @@
     {
       "symbol": "2885",
       "state": "pass",
-      "rowCount": 175,
-      "latestDate": "2026-06-25",
+      "rowCount": 176,
+      "latestDate": "2026-06-26",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-03-31<2026-06-25"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2886",
@@ -440,7 +436,7 @@
     {
       "symbol": "2892",
       "state": "pass",
-      "rowCount": 176,
+      "rowCount": 192,
       "latestDate": "2026-06-26",
       "source": "twse_route",
       "warnings": []
@@ -531,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-06-26"
   },
-  "updatedAt": "2026-06-26T10:46:40.029Z",
+  "updatedAt": "2026-06-26T12:25:27.174Z",
   "sourceLatestDate": "2026-06-26",
   "totalSymbols": 50,
   "requestedCount": 50,
