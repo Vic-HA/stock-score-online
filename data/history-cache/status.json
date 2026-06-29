@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-29T12:17:48.615Z",
-  "finishedAt": "2026-06-29T12:20:42.407Z",
+  "startedAt": "2026-06-29T14:15:56.951Z",
+  "finishedAt": "2026-06-29T14:18:26.732Z",
   "requestedSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -114,7 +114,15 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6669",
+      "symbol": "6189",
+      "state": "pass",
+      "rowCount": 157,
+      "latestDate": "2026-06-29",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6415",
       "state": "pass",
       "rowCount": 177,
       "latestDate": "2026-06-29",
@@ -122,15 +130,7 @@
       "warnings": []
     },
     {
-      "symbol": "8046",
-      "state": "pass",
-      "rowCount": 193,
-      "latestDate": "2026-06-29",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "9910",
+      "symbol": "6505",
       "state": "pass",
       "rowCount": 177,
       "latestDate": "2026-06-29",
@@ -175,7 +175,9 @@
       "rowCount": 157,
       "latestDate": "2026-06-29",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-29"
+      ]
     },
     {
       "symbol": "1301",
@@ -183,7 +185,9 @@
       "rowCount": 198,
       "latestDate": "2026-06-29",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-06-29"
+      ]
     },
     {
       "symbol": "1303",
@@ -527,7 +531,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-06-29"
   },
-  "updatedAt": "2026-06-29T12:20:42.407Z",
+  "updatedAt": "2026-06-29T14:18:26.732Z",
   "sourceLatestDate": "2026-06-29",
   "totalSymbols": 50,
   "requestedCount": 50,
