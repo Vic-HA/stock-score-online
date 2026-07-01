@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-06-30T16:28:39.541Z",
-  "finishedAt": "2026-06-30T16:31:49.488Z",
+  "startedAt": "2026-07-01T10:56:32.763Z",
+  "finishedAt": "2026-07-01T10:58:57.212Z",
   "requestedSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -114,402 +114,402 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6189",
+      "symbol": "6669",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
-      "symbol": "6415",
+      "symbol": "8046",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 195,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
-      "symbol": "6505",
+      "symbol": "9910",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "0050",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 159,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "00981A",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 159,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1101",
       "state": "pass",
-      "rowCount": 199,
-      "latestDate": "2026-06-30",
+      "rowCount": 200,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1102",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1216",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 159,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1301",
       "state": "pass",
-      "rowCount": 199,
-      "latestDate": "2026-06-30",
+      "rowCount": 200,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1303",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "1326",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2002",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2207",
       "state": "pass",
-      "rowCount": 198,
-      "latestDate": "2026-06-30",
+      "rowCount": 199,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2303",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2308",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2317",
       "state": "pass",
-      "rowCount": 194,
-      "latestDate": "2026-06-30",
+      "rowCount": 195,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2327",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2330",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 159,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2345",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2356",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2357",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2379",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2382",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2395",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2406",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 159,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2408",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2412",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2454",
       "state": "pass",
-      "rowCount": 158,
-      "latestDate": "2026-06-30",
+      "rowCount": 159,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2474",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2603",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2609",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2615",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2618",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2801",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2881",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2882",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2884",
       "state": "pass",
-      "rowCount": 177,
-      "latestDate": "2026-06-30",
+      "rowCount": 178,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2885",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2886",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2891",
       "state": "pass",
-      "rowCount": 199,
-      "latestDate": "2026-06-30",
+      "rowCount": 200,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2892",
       "state": "pass",
-      "rowCount": 194,
-      "latestDate": "2026-06-30",
+      "rowCount": 195,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "2912",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3008",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3034",
       "state": "pass",
-      "rowCount": 194,
-      "latestDate": "2026-06-30",
+      "rowCount": 195,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3045",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "3711",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "4904",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "5871",
       "state": "pass",
-      "rowCount": 194,
-      "latestDate": "2026-06-30",
+      "rowCount": 195,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "5876",
       "state": "pass",
-      "rowCount": 178,
-      "latestDate": "2026-06-30",
+      "rowCount": 179,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     },
     {
       "symbol": "5880",
       "state": "pass",
-      "rowCount": 179,
-      "latestDate": "2026-06-30",
+      "rowCount": 180,
+      "latestDate": "2026-07-01",
       "source": "twse_route",
       "warnings": []
     }
@@ -525,10 +525,10 @@
   "compatibilitySnapshot": {
     "path": "data/twse-history-snapshot.json",
     "symbols": 53,
-    "sourceLatestDate": "2026-06-30"
+    "sourceLatestDate": "2026-07-01"
   },
-  "updatedAt": "2026-06-30T16:31:49.488Z",
-  "sourceLatestDate": "2026-06-30",
+  "updatedAt": "2026-07-01T10:58:57.212Z",
+  "sourceLatestDate": "2026-07-01",
   "totalSymbols": 50,
   "requestedCount": 50,
   "passCount": 50,
@@ -537,5 +537,5 @@
   "prunedCount": 0,
   "snapshotPath": "data/twse-history-snapshot.json",
   "snapshotSymbols": 53,
-  "latestResultDate": "2026-06-30"
+  "latestResultDate": "2026-07-01"
 }
