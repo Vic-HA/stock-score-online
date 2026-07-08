@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-07-08T11:53:51.684Z",
-  "finishedAt": "2026-07-08T12:01:34.245Z",
+  "startedAt": "2026-07-08T16:07:25.569Z",
+  "finishedAt": "2026-07-08T16:10:21.317Z",
   "requestedSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -114,7 +114,15 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6669",
+      "symbol": "6189",
+      "state": "pass",
+      "rowCount": 164,
+      "latestDate": "2026-07-08",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6415",
       "state": "pass",
       "rowCount": 184,
       "latestDate": "2026-07-08",
@@ -122,17 +130,9 @@
       "warnings": []
     },
     {
-      "symbol": "8046",
+      "symbol": "6505",
       "state": "pass",
-      "rowCount": 200,
-      "latestDate": "2026-07-08",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "9910",
-      "state": "pass",
-      "rowCount": 205,
+      "rowCount": 184,
       "latestDate": "2026-07-08",
       "source": "twse_route",
       "warnings": []
@@ -151,9 +151,7 @@
       "rowCount": 164,
       "latestDate": "2026-07-08",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-07-08"
-      ]
+      "warnings": []
     },
     {
       "symbol": "1101",
@@ -217,9 +215,7 @@
       "rowCount": 204,
       "latestDate": "2026-07-08",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-06-30<2026-07-08"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2303",
@@ -357,9 +353,7 @@
       "rowCount": 184,
       "latestDate": "2026-07-08",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-06-30<2026-07-08"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2609",
@@ -535,7 +529,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-07-08"
   },
-  "updatedAt": "2026-07-08T12:01:34.245Z",
+  "updatedAt": "2026-07-08T16:10:21.317Z",
   "sourceLatestDate": "2026-07-08",
   "totalSymbols": 50,
   "requestedCount": 50,
