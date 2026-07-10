@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-07-10T12:32:27.308Z",
-  "finishedAt": "2026-07-10T12:35:27.450Z",
+  "startedAt": "2026-07-10T16:31:41.242Z",
+  "finishedAt": "2026-07-10T16:34:19.409Z",
   "requestedSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -114,15 +114,7 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6189",
-      "state": "pass",
-      "rowCount": 165,
-      "latestDate": "2026-07-09",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "6415",
+      "symbol": "6669",
       "state": "pass",
       "rowCount": 185,
       "latestDate": "2026-07-09",
@@ -130,9 +122,17 @@
       "warnings": []
     },
     {
-      "symbol": "6505",
+      "symbol": "8046",
       "state": "pass",
-      "rowCount": 185,
+      "rowCount": 201,
+      "latestDate": "2026-07-09",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "9910",
+      "state": "pass",
+      "rowCount": 206,
       "latestDate": "2026-07-09",
       "source": "twse_route",
       "warnings": []
@@ -340,7 +340,7 @@
     {
       "symbol": "2474",
       "state": "pass",
-      "rowCount": 185,
+      "rowCount": 206,
       "latestDate": "2026-07-09",
       "source": "twse_route",
       "warnings": []
@@ -391,7 +391,9 @@
       "rowCount": 185,
       "latestDate": "2026-07-09",
       "source": "twse_route",
-      "warnings": []
+      "warnings": [
+        "ROLLBACK_GUARD_FETCH_OLDER:2026-06-30<2026-07-09"
+      ]
     },
     {
       "symbol": "2882",
@@ -527,7 +529,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-07-09"
   },
-  "updatedAt": "2026-07-10T12:35:27.450Z",
+  "updatedAt": "2026-07-10T16:34:19.409Z",
   "sourceLatestDate": "2026-07-09",
   "totalSymbols": 50,
   "requestedCount": 50,
