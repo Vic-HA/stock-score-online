@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-07-28T12:05:36.200Z",
-  "finishedAt": "2026-07-28T12:08:03.487Z",
+  "startedAt": "2026-07-28T16:10:21.895Z",
+  "finishedAt": "2026-07-28T16:13:34.355Z",
   "requestedSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -114,7 +114,15 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6669",
+      "symbol": "6189",
+      "state": "pass",
+      "rowCount": 177,
+      "latestDate": "2026-07-28",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6415",
       "state": "pass",
       "rowCount": 197,
       "latestDate": "2026-07-28",
@@ -122,17 +130,9 @@
       "warnings": []
     },
     {
-      "symbol": "8046",
+      "symbol": "6505",
       "state": "pass",
-      "rowCount": 213,
-      "latestDate": "2026-07-28",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "9910",
-      "state": "pass",
-      "rowCount": 218,
+      "rowCount": 197,
       "latestDate": "2026-07-28",
       "source": "twse_route",
       "warnings": []
@@ -527,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-07-28"
   },
-  "updatedAt": "2026-07-28T12:08:03.487Z",
+  "updatedAt": "2026-07-28T16:13:34.355Z",
   "sourceLatestDate": "2026-07-28",
   "totalSymbols": 50,
   "requestedCount": 50,
