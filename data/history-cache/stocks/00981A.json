@@ -5,7 +5,7 @@
   "type": "etf",
   "active": true,
   "createdAt": "2026-06-25T05:41:34.248Z",
-  "updatedAt": "2026-07-29T12:10:55.547Z",
+  "updatedAt": "2026-07-29T15:56:12.853Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -1455,14 +1455,15 @@
   "validation": {
     "status": "pass",
     "warnings": [
-      "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-07-08"
+      "ROLLBACK_GUARD_FETCH_OLDER:2026-05-29<2026-07-08",
+      "ROLLBACK_GUARD_FETCH_OLDER:2026-06-30<2026-07-29"
     ]
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-07-29T12:10:55.547Z",
-    "lastRefreshAt": "2026-07-29T12:10:55.547Z",
-    "lastGoodAt": "2026-07-29T12:10:55.547Z",
+    "lastRequestedAt": "2026-07-29T15:56:12.853Z",
+    "lastRefreshAt": "2026-07-29T15:56:12.853Z",
+    "lastGoodAt": "2026-07-29T15:56:12.853Z",
     "lastError": null
   }
 }
