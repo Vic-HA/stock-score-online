@@ -5,7 +5,7 @@
   "type": "etf",
   "active": true,
   "createdAt": "2026-06-25T05:41:34.248Z",
-  "updatedAt": "2026-08-04T16:19:46.562Z",
+  "updatedAt": "2026-08-05T10:13:49.653Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -1472,11 +1472,19 @@
       "l": 26.91,
       "c": 27.58,
       "v": 273265013
+    },
+    {
+      "d": "2026-08-05",
+      "o": 28.86,
+      "h": 29,
+      "l": 28.4,
+      "c": 28.46,
+      "v": 240838183
     }
   ],
   "meta": {
-    "latestDate": "2026-08-04",
-    "rowCount": 182,
+    "latestDate": "2026-08-05",
+    "rowCount": 183,
     "retentionRows": 220,
     "ma60Ready": true,
     "macdWarmupReady": true,
@@ -1493,9 +1501,9 @@
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-08-04T16:19:46.562Z",
-    "lastRefreshAt": "2026-08-04T16:19:46.562Z",
-    "lastGoodAt": "2026-08-04T16:19:46.562Z",
+    "lastRequestedAt": "2026-08-05T10:13:49.653Z",
+    "lastRefreshAt": "2026-08-05T10:13:49.653Z",
+    "lastGoodAt": "2026-08-05T10:13:49.653Z",
     "lastError": null
   }
 }
