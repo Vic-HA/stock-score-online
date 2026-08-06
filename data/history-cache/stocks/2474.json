@@ -5,7 +5,7 @@
   "type": "stock",
   "active": true,
   "createdAt": "2026-06-16T02:56:45.770Z",
-  "updatedAt": "2026-08-06T10:15:56.689Z",
+  "updatedAt": "2026-08-06T12:10:32.223Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -1798,9 +1798,9 @@
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-08-06T10:15:56.689Z",
-    "lastRefreshAt": "2026-08-06T10:15:56.689Z",
-    "lastGoodAt": "2026-08-06T10:15:56.689Z",
+    "lastRequestedAt": "2026-08-06T12:10:32.223Z",
+    "lastRefreshAt": "2026-08-06T12:10:32.223Z",
+    "lastGoodAt": "2026-08-06T12:10:32.223Z",
     "lastError": null
   }
 }
