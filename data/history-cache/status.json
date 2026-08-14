@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-08-14T08:47:10.449Z",
-  "finishedAt": "2026-08-14T08:57:05.000Z",
+  "startedAt": "2026-08-14T11:05:03.247Z",
+  "finishedAt": "2026-08-14T11:07:57.094Z",
   "requestedSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -114,15 +114,7 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6189",
-      "state": "pass",
-      "rowCount": 190,
-      "latestDate": "2026-08-14",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "6415",
+      "symbol": "6669",
       "state": "pass",
       "rowCount": 210,
       "latestDate": "2026-08-14",
@@ -130,9 +122,17 @@
       "warnings": []
     },
     {
-      "symbol": "6505",
+      "symbol": "8046",
       "state": "pass",
-      "rowCount": 210,
+      "rowCount": 220,
+      "latestDate": "2026-08-14",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "9910",
+      "state": "pass",
+      "rowCount": 220,
       "latestDate": "2026-08-14",
       "source": "twse_route",
       "warnings": []
@@ -196,12 +196,10 @@
     {
       "symbol": "1326",
       "state": "pass",
-      "rowCount": 209,
-      "latestDate": "2026-08-13",
+      "rowCount": 210,
+      "latestDate": "2026-08-14",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-07-31<2026-08-13"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2002",
@@ -278,12 +276,10 @@
     {
       "symbol": "2357",
       "state": "pass",
-      "rowCount": 209,
-      "latestDate": "2026-08-13",
+      "rowCount": 210,
+      "latestDate": "2026-08-14",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-07-31<2026-08-13"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2379",
@@ -296,12 +292,10 @@
     {
       "symbol": "2382",
       "state": "pass",
-      "rowCount": 209,
-      "latestDate": "2026-08-13",
+      "rowCount": 210,
+      "latestDate": "2026-08-14",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-07-31<2026-08-13"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2395",
@@ -314,12 +308,10 @@
     {
       "symbol": "2406",
       "state": "pass",
-      "rowCount": 189,
-      "latestDate": "2026-08-13",
+      "rowCount": 190,
+      "latestDate": "2026-08-14",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-07-31<2026-08-13"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2408",
@@ -535,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-08-14"
   },
-  "updatedAt": "2026-08-14T08:57:05.000Z",
+  "updatedAt": "2026-08-14T11:07:57.094Z",
   "sourceLatestDate": "2026-08-14",
   "totalSymbols": 50,
   "requestedCount": 50,
