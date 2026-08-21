@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-08-21T08:17:55.544Z",
-  "finishedAt": "2026-08-21T08:29:17.873Z",
+  "startedAt": "2026-08-21T10:39:57.440Z",
+  "finishedAt": "2026-08-21T10:42:26.521Z",
   "requestedSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -114,15 +114,7 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6189",
-      "state": "pass",
-      "rowCount": 195,
-      "latestDate": "2026-08-21",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "6415",
+      "symbol": "6669",
       "state": "pass",
       "rowCount": 215,
       "latestDate": "2026-08-21",
@@ -130,9 +122,17 @@
       "warnings": []
     },
     {
-      "symbol": "6505",
+      "symbol": "8046",
       "state": "pass",
-      "rowCount": 215,
+      "rowCount": 220,
+      "latestDate": "2026-08-21",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "9910",
+      "state": "pass",
+      "rowCount": 220,
       "latestDate": "2026-08-21",
       "source": "twse_route",
       "warnings": []
@@ -452,12 +452,10 @@
     {
       "symbol": "3008",
       "state": "pass",
-      "rowCount": 214,
-      "latestDate": "2026-08-20",
+      "rowCount": 215,
+      "latestDate": "2026-08-21",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-07-31<2026-08-20"
-      ]
+      "warnings": []
     },
     {
       "symbol": "3034",
@@ -478,12 +476,10 @@
     {
       "symbol": "3711",
       "state": "pass",
-      "rowCount": 214,
-      "latestDate": "2026-08-20",
+      "rowCount": 215,
+      "latestDate": "2026-08-21",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-07-31<2026-08-20"
-      ]
+      "warnings": []
     },
     {
       "symbol": "4904",
@@ -531,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-08-21"
   },
-  "updatedAt": "2026-08-21T08:29:17.873Z",
+  "updatedAt": "2026-08-21T10:42:26.521Z",
   "sourceLatestDate": "2026-08-21",
   "totalSymbols": 50,
   "requestedCount": 50,
