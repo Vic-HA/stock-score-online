@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-09-10T12:21:58.314Z",
-  "finishedAt": "2026-09-10T12:42:30.577Z",
+  "startedAt": "2026-09-10T14:18:21.191Z",
+  "finishedAt": "2026-09-10T14:21:22.986Z",
   "requestedSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6189",
-    "6415",
-    "6505",
+    "6669",
+    "8046",
+    "9910",
     "0050",
     "00981A",
     "1101",
@@ -114,15 +114,7 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6189",
-      "state": "pass",
-      "rowCount": 209,
-      "latestDate": "2026-09-10",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "6415",
+      "symbol": "6669",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-09-10",
@@ -130,7 +122,15 @@
       "warnings": []
     },
     {
-      "symbol": "6505",
+      "symbol": "8046",
+      "state": "pass",
+      "rowCount": 220,
+      "latestDate": "2026-09-10",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "9910",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-09-10",
@@ -445,11 +445,9 @@
       "symbol": "2912",
       "state": "pass",
       "rowCount": 220,
-      "latestDate": "2026-09-09",
+      "latestDate": "2026-09-10",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-08-31<2026-09-09"
-      ]
+      "warnings": []
     },
     {
       "symbol": "3008",
@@ -529,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-09-10"
   },
-  "updatedAt": "2026-09-10T12:42:30.577Z",
+  "updatedAt": "2026-09-10T14:21:22.986Z",
   "sourceLatestDate": "2026-09-10",
   "totalSymbols": 50,
   "requestedCount": 50,
