@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-09-15T12:52:34.638Z",
-  "finishedAt": "2026-09-15T13:13:00.548Z",
+  "startedAt": "2026-09-15T14:53:56.536Z",
+  "finishedAt": "2026-09-15T14:57:37.568Z",
   "requestedSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -114,7 +114,15 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6669",
+      "symbol": "6189",
+      "state": "pass",
+      "rowCount": 212,
+      "latestDate": "2026-09-15",
+      "source": "twse_route",
+      "warnings": []
+    },
+    {
+      "symbol": "6415",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-09-15",
@@ -122,15 +130,7 @@
       "warnings": []
     },
     {
-      "symbol": "8046",
-      "state": "pass",
-      "rowCount": 220,
-      "latestDate": "2026-09-15",
-      "source": "twse_route",
-      "warnings": []
-    },
-    {
-      "symbol": "9910",
+      "symbol": "6505",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-09-15",
@@ -349,11 +349,9 @@
       "symbol": "2603",
       "state": "pass",
       "rowCount": 220,
-      "latestDate": "2026-09-14",
+      "latestDate": "2026-09-15",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-08-31<2026-09-14"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2609",
@@ -367,11 +365,9 @@
       "symbol": "2615",
       "state": "pass",
       "rowCount": 220,
-      "latestDate": "2026-09-14",
+      "latestDate": "2026-09-15",
       "source": "twse_route",
-      "warnings": [
-        "ROLLBACK_GUARD_FETCH_OLDER:2026-08-31<2026-09-14"
-      ]
+      "warnings": []
     },
     {
       "symbol": "2618",
@@ -531,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-09-15"
   },
-  "updatedAt": "2026-09-15T13:13:00.548Z",
+  "updatedAt": "2026-09-15T14:57:37.568Z",
   "sourceLatestDate": "2026-09-15",
   "totalSymbols": 50,
   "requestedCount": 50,
