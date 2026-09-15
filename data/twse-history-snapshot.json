@@ -1,7 +1,7 @@
 {
   "build": "TWSE_HISTORY_SNAPSHOT_V03_PHASE_D_PER_SYMBOL_COMPAT",
   "builder": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
-  "updatedAt": "2026-09-15T14:57:37.557Z",
+  "updatedAt": "2026-09-15T18:10:53.487Z",
   "sourceLatestDate": "2026-09-15",
   "retentionRows": 220,
   "symbols": {
@@ -93602,11 +93602,11 @@
     "snapshotSymbolsPreserved": 53,
     "snapshotSymbolsWritten": 53,
     "phaseDStatus": {
-      "lastRunAt": "2026-09-15T14:53:56.536Z",
+      "lastRunAt": "2026-09-15T18:07:59.480Z",
       "passSymbols": [
-        "6189",
-        "6415",
-        "6505",
+        "6669",
+        "8046",
+        "9910",
         "0050",
         "00981A",
         "1101",
