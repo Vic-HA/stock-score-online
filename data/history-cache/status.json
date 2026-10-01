@@ -3,12 +3,12 @@
   "build": "PHASE_D_HISTORY_CACHE_V0_5_REFRESH_STATUS",
   "mode": "auto",
   "ok": true,
-  "startedAt": "2026-10-01T17:00:01.455Z",
-  "finishedAt": "2026-10-01T17:03:01.674Z",
+  "startedAt": "2026-10-01T19:28:31.588Z",
+  "finishedAt": "2026-10-01T19:31:36.951Z",
   "requestedSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -58,9 +58,9 @@
     "5880"
   ],
   "passSymbols": [
-    "6669",
-    "8046",
-    "9910",
+    "6189",
+    "6415",
+    "6505",
     "0050",
     "00981A",
     "1101",
@@ -114,7 +114,7 @@
   "prunedSymbols": [],
   "results": [
     {
-      "symbol": "6669",
+      "symbol": "6189",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-10-01",
@@ -122,7 +122,7 @@
       "warnings": []
     },
     {
-      "symbol": "8046",
+      "symbol": "6415",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-10-01",
@@ -130,7 +130,7 @@
       "warnings": []
     },
     {
-      "symbol": "9910",
+      "symbol": "6505",
       "state": "pass",
       "rowCount": 220,
       "latestDate": "2026-10-01",
@@ -527,7 +527,7 @@
     "symbols": 53,
     "sourceLatestDate": "2026-10-01"
   },
-  "updatedAt": "2026-10-01T17:03:01.674Z",
+  "updatedAt": "2026-10-01T19:31:36.951Z",
   "sourceLatestDate": "2026-10-01",
   "totalSymbols": 50,
   "requestedCount": 50,
