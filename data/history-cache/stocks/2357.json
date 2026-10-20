@@ -5,7 +5,7 @@
   "type": "stock",
   "active": true,
   "createdAt": "2026-06-16T02:56:45.770Z",
-  "updatedAt": "2026-10-19T19:49:54.921Z",
+  "updatedAt": "2026-10-20T12:56:35.583Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -17,14 +17,6 @@
     ]
   },
   "rows": [
-    {
-      "d": "2025-11-20",
-      "o": 581,
-      "h": 583,
-      "l": 571,
-      "c": 573,
-      "v": 3669211
-    },
     {
       "d": "2025-11-21",
       "o": 559,
@@ -1776,10 +1768,18 @@
       "l": 946,
       "c": 970,
       "v": 4307918
+    },
+    {
+      "d": "2026-10-20",
+      "o": 962,
+      "h": 993,
+      "l": 962,
+      "c": 981,
+      "v": 1920415
     }
   ],
   "meta": {
-    "latestDate": "2026-10-19",
+    "latestDate": "2026-10-20",
     "rowCount": 220,
     "retentionRows": 220,
     "ma60Ready": true,
@@ -1797,9 +1797,9 @@
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-10-19T19:49:54.921Z",
-    "lastRefreshAt": "2026-10-19T19:49:54.921Z",
-    "lastGoodAt": "2026-10-19T19:49:54.921Z",
+    "lastRequestedAt": "2026-10-20T12:56:35.583Z",
+    "lastRefreshAt": "2026-10-20T12:56:35.583Z",
+    "lastGoodAt": "2026-10-20T12:56:35.583Z",
     "lastError": null
   }
 }
