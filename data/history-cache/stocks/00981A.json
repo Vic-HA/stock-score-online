@@ -5,7 +5,7 @@
   "type": "etf",
   "active": true,
   "createdAt": "2026-06-25T05:41:34.248Z",
-  "updatedAt": "2026-10-28T14:27:15.156Z",
+  "updatedAt": "2026-10-28T16:34:20.688Z",
   "inactiveAt": null,
   "source": {
     "primary": "twse",
@@ -1797,9 +1797,9 @@
   },
   "status": {
     "state": "pass",
-    "lastRequestedAt": "2026-10-28T14:27:15.156Z",
-    "lastRefreshAt": "2026-10-28T14:27:15.156Z",
-    "lastGoodAt": "2026-10-28T14:27:15.156Z",
+    "lastRequestedAt": "2026-10-28T16:34:20.688Z",
+    "lastRefreshAt": "2026-10-28T16:34:20.688Z",
+    "lastGoodAt": "2026-10-28T16:34:20.688Z",
     "lastError": null
   }
 }
